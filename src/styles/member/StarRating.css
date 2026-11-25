@@ -1,0 +1,63 @@
+.sr-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sr-rating > span {
+  display: inline-flex;
+}
+
+.sr-star {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.sr-empty {
+  display: block;
+  color: #dcd7e7;
+}
+
+.sr-filled {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden;
+  color: #f5a623;
+  pointer-events: none;
+}
+
+.sr-filled svg {
+  display: block;
+  max-width: none;
+}
+
+.sr-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.18s ease;
+}
+
+.sr-button:hover {
+  transform: scale(1.15);
+}
+
+.sr-button:focus-visible {
+  outline: 2px solid #6339ef;
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+
+.sr-value {
+  margin-left: 5px;
+  color: #17143d;
+  font-size: 13px;
+  font-weight: 750;
+}

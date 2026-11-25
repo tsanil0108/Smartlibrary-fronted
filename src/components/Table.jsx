@@ -1,0 +1,2 @@
+import React,{useEffect,useState} from 'react';import {BookOpen,ChevronLeft,ChevronRight} from 'lucide-react';import {api} from '../services/api';
+export function Table({rows=[],columns}){return <div className="table-wrap"><table><thead><tr>{columns.map(([label])=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={r.id??i}>{columns.map(([label,render])=><td key={label}>{render(r)}</td>)}</tr>)}</tbody></table>{!rows.length&&<p className="empty">No records found.</p>}</div>}

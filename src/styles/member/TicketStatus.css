@@ -1,0 +1,54 @@
+.ts-badge,
+.ts-priority {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 30px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ts-open {
+  color: #b45309;
+  background: #fff3dc;
+}
+
+.ts-progress {
+  color: #2563eb;
+  background: #eaf2ff;
+}
+
+.ts-resolved {
+  color: #15803d;
+  background: #e6f8ed;
+}
+
+.ts-closed {
+  color: #64748b;
+  background: #edf0f5;
+}
+
+.ts-high {
+  color: #dc2626;
+  background: #fff0f0;
+}
+
+.ts-medium {
+  color: #b45309;
+  background: #fff4e5;
+}
+
+.ts-low {
+  color: #15803d;
+  background: #eaf8ef;
+}
+
+.ts-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}

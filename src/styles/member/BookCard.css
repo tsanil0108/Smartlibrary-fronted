@@ -1,0 +1,211 @@
+.bcard {
+  min-width: 0;
+  background: #ffffff;
+  border: 1px solid #e7e5ef;
+  border-radius: 19px;
+  overflow: hidden;
+  box-shadow: 0 5px 18px rgba(23, 20, 61, 0.04);
+  transition: 0.25s ease;
+}
+
+.bcard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 28px rgba(23, 20, 61, 0.1);
+}
+
+.bcard-visual {
+  position: relative;
+  padding-top: 22px;
+  background: linear-gradient(145deg, #f4f1fb, #e9e4f4);
+}
+
+.bcard:hover .bc-cover-image {
+  transform: scale(1.04);
+}
+
+.bcard-category {
+  position: absolute;
+  top: 13px;
+  left: 12px;
+  z-index: 1;
+  max-width: calc(100% - 65px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.9);
+  color: #5e5479;
+  padding: 6px 9px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.bcard-heart {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  z-index: 2;
+  width: 37px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  background: white;
+  color: #6339ef;
+  border: 1px solid #e8e0fa;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.bcard-heart:hover,
+.bcard-heart-active {
+  color: #e74370;
+  background: #fff0f4;
+  border-color: #ffd4df;
+}
+
+.bcard-content {
+  padding: 18px;
+}
+
+.bcard-availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 20px;
+}
+
+.bcard-available {
+  background: #e5f7ed;
+  color: #16815b;
+}
+
+.bcard-unavailable {
+  background: #fff0de;
+  color: #b76a00;
+}
+
+.bcard-content h3 {
+  margin: 12px 0 6px;
+  color: #17143d;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.4;
+  min-height: 48px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bcard-author {
+  margin: 0;
+  font-size: 12px;
+  color: #77758a;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bcard-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #77758a;
+  padding: 14px 0;
+  margin-top: 12px;
+  border-top: 1px solid #efedf5;
+}
+
+.bcard-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bcard-main-btn,
+.bcard-details-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.bcard-main-btn {
+  flex: 1;
+  color: white;
+  padding: 10px 8px;
+}
+
+.bcard-borrow-btn {
+  background: #6339ef;
+}
+
+.bcard-borrow-btn:hover {
+  background: #5025d7;
+}
+
+.bcard-reserve-btn {
+  background: #e87500;
+}
+
+.bcard-reserve-btn:hover {
+  background: #c96200;
+}
+
+.bcard-details-btn {
+  width: 42px;
+  flex-shrink: 0;
+  background: #f1ebff;
+  color: #6339ef;
+}
+
+.bcard-details-btn:hover {
+  background: #e4d9ff;
+}
+
+.bcard button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bcard button:focus-visible {
+  outline: 3px solid #b8a3ff;
+  outline-offset: 2px;
+}
+
+.bcard-spin {
+  animation: bcard-spin 0.8s linear infinite;
+}
+
+@keyframes bcard-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 500px) {
+  .bcard-content {
+    padding: 13px;
+  }
+
+  .bcard-content h3 {
+    font-size: 15px;
+    min-height: 42px;
+  }
+
+  .bcard .bc-cover-container {
+    height: 190px;
+  }
+}

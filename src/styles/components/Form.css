@@ -1,0 +1,9 @@
+.form{display:grid;gap:14px;margin:16px 0}
+.form label{display:grid;gap:6px;font-size:14px;font-weight:600}
+.form button{justify-self:start}
+button,.button,input,select{transition:background .18s,border-color .18s,box-shadow .18s}
+button:not(:disabled):hover{border-color:#93b4f6}
+.primary{box-shadow:0 4px 12px #2563eb26}
+.primary:hover{color:white}
+input:focus,select:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px #2563eb18}
+.form input,.form select{width:100%}

@@ -1,0 +1,14 @@
+.hero{display:grid;grid-template-columns:1.4fr 1fr;align-items:center;gap:24px;background:linear-gradient(120deg,#e8f0ff,#f8fbff);border:1px solid #dbe7ff;border-radius:24px;padding:clamp(24px,5vw,64px);margin-bottom:28px}
+.hero h1{font-size:clamp(36px,5vw,64px);line-height:1.08;color:#163b80}
+.hero p{max-width:480px;color:var(--muted);font-size:17px;line-height:1.7}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:2px;color:var(--blue);display:block;margin-bottom:18px}
+.hero-art{display:grid;place-items:center;gap:16px;color:var(--blue);background:#ffffffa0;border-radius:24px;padding:30px;font-weight:700}
+.features{margin-bottom:26px}
+.features p{color:var(--muted);font-size:14px}
+.features h3{margin-top:12px}
+.hero{position:relative;overflow:hidden;background:radial-gradient(ellipse at 90% 10%,#c7ddff 0,transparent 55%),linear-gradient(120deg,#fff,#e9f1ff);box-shadow:var(--shadow);min-height:350px}
+.hero h1{color:var(--text);letter-spacing:-.055em}
+.hero-art{position:relative;min-height:240px;border:1px solid #fff;box-shadow:0 16px 40px #1744b815;transform:rotate(-3deg);background:linear-gradient(150deg,#fff,#e3edff)}
+.hero-art svg{filter:drop-shadow(0 8px 8px #2563eb20)}
+.hero .button{padding:14px 22px}
+.eyebrow{display:inline-block;background:#dbeafe;padding:7px 12px;border-radius:30px;letter-spacing:1.2px}

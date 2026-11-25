@@ -1,0 +1,4 @@
+.pill{display:inline-block;padding:5px 10px;border-radius:20px;background:#eef2f7;color:var(--muted);font-size:12px;font-weight:600}
+.good{background:#e6f7ef;color:#13734a}
+.bad,.error{background:#fff0ef;color:#b42318}
+.error{padding:12px;border-radius:8px}

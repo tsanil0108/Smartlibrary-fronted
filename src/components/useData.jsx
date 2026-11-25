@@ -1,0 +1,2 @@
+import React,{useEffect,useState} from 'react';import {BookOpen,ChevronLeft,ChevronRight} from 'lucide-react';import {api} from '../services/api';
+export function useData(path){const [data,setData]=useState(null),[error,setError]=useState(''),[version,refresh]=useState(0);useEffect(()=>{let active=true;setData(null);setError('');api(path).then(x=>active&&setData(x)).catch(e=>active&&setError(e.message));return()=>{active=false}},[path,version]);return {data,error,reload:()=>refresh(v=>v+1)}}

@@ -1,0 +1,157 @@
+.cdc-card {
+  min-width: 0;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #e8e5f0;
+  border-radius: 20px;
+  color: #17143d;
+  box-shadow: 0 5px 20px #17143d06;
+}
+
+.cdc-card * {
+  box-sizing: border-box;
+}
+
+.cdc-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cdc-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  background: #fff0de;
+  border-radius: 13px;
+  color: #e78a19;
+}
+
+.cdc-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.cdc-header p {
+  margin: 6px 0 0;
+  color: #77758a;
+  font-size: 11px;
+}
+
+.cdc-chart-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.cdc-chart {
+  width: 210px;
+  max-width: 100%;
+  height: auto;
+}
+
+.cdc-chart circle {
+  transition:
+    stroke-width 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.cdc-total {
+  fill: #17143d;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.cdc-total-label {
+  fill: #77758a;
+  font-size: 10px;
+}
+
+.cdc-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cdc-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #17143d;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cdc-legend-row:hover,
+.cdc-selected {
+  background: #f5f1ff;
+}
+
+.cdc-dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+.cdc-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cdc-count {
+  color: #91899f;
+}
+
+.cdc-legend-row strong {
+  min-width: 45px;
+  text-align: right;
+}
+
+.cdc-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 270px;
+  text-align: center;
+}
+
+.cdc-empty svg {
+  color: #6339ef;
+}
+
+.cdc-empty h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.cdc-empty p {
+  max-width: 240px;
+  margin: 0;
+  color: #77758a;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+@media (max-width: 600px) {
+  .cdc-card {
+    padding: 17px;
+  }
+}

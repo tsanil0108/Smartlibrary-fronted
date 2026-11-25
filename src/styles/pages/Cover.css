@@ -1,0 +1,2 @@
+.cover{width:100%;aspect-ratio:4/5;object-fit:cover;display:block}
+.placeholder{background:linear-gradient(140deg,#1e40af,#60a5fa);color:white;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;padding:20px;text-align:center;font-weight:700}

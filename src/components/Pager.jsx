@@ -1,0 +1,2 @@
+import React,{useEffect,useState} from 'react';import {BookOpen,ChevronLeft,ChevronRight} from 'lucide-react';import {api} from '../services/api';
+export function Pager({data,page,setPage}){return <div className="pager"><button disabled={!page} onClick={()=>setPage(page-1)}><ChevronLeft size={16}/> Previous</button><span>Page {page+1} of {Math.max(1,data?.totalPages||1)}</span><button disabled={page+1>=(data?.totalPages||1)} onClick={()=>setPage(page+1)}>Next <ChevronRight size={16}/></button></div>}

@@ -1,0 +1,2 @@
+@media(max-width:600px){.hero,.detail{grid-template-columns:1fr}.hero-art{display:none}.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.book-body{padding:12px}.detail .cover{max-width:220px}.panel{padding:16px}.book{padding:0}}
+@media(max-width:600px){.hero{min-height:0;padding:28px 22px}.hero h1{font-size:38px}.hero p{font-size:15px}.auth{margin:20px auto;padding:22px}.book-body h3{font-size:15px}.book-body .pill{white-space:normal}}

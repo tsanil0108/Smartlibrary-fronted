@@ -1,0 +1,7 @@
+.stats,.features,.report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+.stat small{display:block;text-transform:capitalize}
+.stat strong{display:block;font-size:28px;margin-top:10px}
+.stat{position:relative;overflow:hidden;border-top:3px solid var(--blue)}
+.stat:nth-child(2n){border-top-color:var(--accent)}
+.stat strong{color:var(--text);font-size:32px;letter-spacing:-1px}
+.stat small{font-weight:600}

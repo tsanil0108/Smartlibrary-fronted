@@ -1,0 +1,10 @@
+.table-wrap{overflow-x:auto;background:white;border:1px solid var(--border);border-radius:var(--radius);margin:16px 0}
+table{width:100%;border-collapse:collapse;min-width:560px;text-align:left}
+th,td{padding:15px;border-bottom:1px solid var(--border)}
+th{background:#f0f5ff;color:var(--muted);font-size:12px;text-transform:uppercase}
+td{font-size:14px}
+.actions button{padding:7px 10px;font-size:13px}
+.empty{padding:20px;text-align:center}
+.table-wrap{box-shadow:var(--shadow)}
+tbody tr:hover{background:#f7faff}
+th{letter-spacing:.05em}

@@ -1,0 +1,3 @@
+.detail{display:grid;grid-template-columns:minmax(160px,260px) 1fr;gap:30px}
+.detail .cover{border-radius:12px}
+.detail p{line-height:1.7}

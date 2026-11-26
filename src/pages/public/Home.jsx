@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -21,7 +21,7 @@ import {
 
 import { Catalogue } from "../public/Catalogue";
 
-import "../../styles/public/Home.css";
+import "../../styles/pages/Home.css";
 
 const features = [
   {
@@ -450,7 +450,7 @@ export function Home() {
           </span>
 
           <div className="sl-price">
-            ₹299
+            â‚¹299
             <small>/ 30 days</small>
           </div>
 

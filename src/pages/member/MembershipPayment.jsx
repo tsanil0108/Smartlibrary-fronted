@@ -1,4 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import { Link } from "react-router-dom";
 
 import {
@@ -17,6 +22,9 @@ import {
   LoaderCircle,
   RefreshCw,
   LockKeyhole,
+  X,
+  Smartphone,
+  Landmark,
 } from "lucide-react";
 
 import {
@@ -25,7 +33,16 @@ import {
   formatMembershipDate,
 } from "../../services/membershipApi";
 
+import {
+  loadRazorpayScript,
+  openRazorpayCheckout,
+} from "../../services/RazorpayCheckout";
+
 import "../../styles/member/MembershipPayment.css";
+
+// ==========================================
+// MEMBERSHIP BENEFITS
+// ==========================================
 
 const benefits = [
   "Borrow up to 3 books at a time",
@@ -38,293 +55,960 @@ const benefits = [
   "Library help and support",
 ];
 
+const PENDING_ORDER_KEY = "slm_pending_payment_order";
+
+// ==========================================
+// MEMBERSHIP PAYMENT PAGE
+// ==========================================
+
 export default function MembershipPayment() {
+
   const [membership, setMembership] = useState(null);
-  const [code, setCode] = useState("");
+
+  const [baseQuote, setBaseQuote] = useState(null);
+
   const [quote, setQuote] = useState(null);
 
+  const [code, setCode] = useState("");
+
   const [loading, setLoading] = useState(true);
+
   const [loadError, setLoadError] = useState("");
+
   const [applying, setApplying] = useState(false);
+
   const [processing, setProcessing] = useState(false);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  const busy = applying || processing;
+  const [error, setError] = useState("");
+
+  const [notice, setNotice] = useState("");
+
+  const [success, setSuccess] = useState(null);
+
+  const [pendingOrder, setPendingOrder] = useState(null);
+
+  const [pendingVerification, setPendingVerification] =
+    useState(null);
+
+  const actionLock = useRef(false);
+
+  const busy =
+    applying || processing || checking;
+
+  const currentQuote = quote || baseQuote;
+
+  const originalPrice =
+    currentQuote?.originalPaise ?? 29900;
+
+  const discount =
+    currentQuote?.discountPaise ?? 0;
+
+  const payable =
+    currentQuote?.payablePaise ?? originalPrice;
+
+  const membershipDays =
+    currentQuote?.membershipDays ?? 30;
+
+  const planName =
+    currentQuote?.planName || "Premium Monthly";
+
+  const isActive =
+    membership?.valid === true;
+
+  const isFree =
+    currentQuote?.freeRedemption === true &&
+    payable === 0;
+
+  const couponApplied =
+    Boolean(quote?.couponCode);
+
+  const couponNeedsApply =
+    Boolean(code.trim()) &&
+    code.trim() !== quote?.couponCode;
+
+  const onlineAvailable =
+    currentQuote?.onlinePaymentAvailable === true;
+
+  // ==========================================
+  // LOAD MEMBERSHIP AND BASE PRICE
+  // ==========================================
 
   async function loadMembership() {
+
     setLoading(true);
+
     setLoadError("");
 
     try {
-      const data = await membershipApi.getDashboard();
-      setMembership(data?.membership ?? null);
-    } catch (err) {
-      setLoadError(
-        err.message || "Unable to load membership details."
+
+      const [dashboard, pricing] =
+        await Promise.all([
+
+          membershipApi.getDashboard(),
+
+          membershipApi.getQuote(),
+        ]);
+
+      setMembership(
+        dashboard?.membership ?? null
       );
+
+      setBaseQuote(pricing);
+
+      const savedOrderId =
+        sessionStorage.getItem(PENDING_ORDER_KEY);
+
+      if (savedOrderId) {
+
+        try {
+
+          const savedOrder =
+            await membershipApi.getOrder(savedOrderId);
+
+          if (savedOrder?.status === "SUCCESS") {
+
+            sessionStorage.removeItem(
+              PENDING_ORDER_KEY
+            );
+
+            setPendingOrder(null);
+
+            const latest =
+              await membershipApi.getDashboard();
+
+            setMembership(
+              latest?.membership ?? null
+            );
+
+          } else {
+
+            setPendingOrder(savedOrder);
+          }
+
+        } catch {
+
+          setNotice(
+            "A previous payment order could not be checked. " +
+            "Check Payment History before paying again."
+          );
+
+          setPendingOrder({
+            orderId: savedOrderId,
+            status: "UNKNOWN",
+          });
+        }
+      }
+
+    } catch (err) {
+
+      setLoadError(
+        err.message ||
+        "Unable to load membership details."
+      );
+
     } finally {
+
       setLoading(false);
     }
   }
 
   useEffect(() => {
+
     loadMembership();
+
   }, []);
 
+  // ==========================================
+  // UPDATE COUPON INPUT
+  // ==========================================
+
   function handleCodeChange(event) {
-    setCode(event.target.value.toUpperCase());
+
+    setCode(
+      event.target.value
+        .toUpperCase()
+        .replace(/[^A-Z0-9_-]/g, "")
+    );
+
     setQuote(null);
+
     setError("");
-    setSuccess(false);
+
+    setSuccess(null);
   }
 
+  // ==========================================
+  // APPLY COUPON
+  // ==========================================
+
   async function handleApplyCoupon(event) {
+
     event.preventDefault();
 
-    if (busy) return;
-
-    if (!code.trim()) {
-      setError("Please enter a coupon code.");
+    if (busy || pendingOrder || actionLock.current) {
       return;
     }
 
+    if (!code.trim()) {
+
+      setError("Please enter a coupon code.");
+
+      return;
+    }
+
+    actionLock.current = true;
+
     setApplying(true);
+
     setError("");
+
+    setNotice("");
+
+    setSuccess(null);
+
     setQuote(null);
-    setSuccess(false);
 
     try {
-      const response = await membershipApi.applyCoupon(code);
 
-      if (!response || response.payablePaise == null) {
-        throw new Error("Invalid coupon response.");
-      }
+      const response =
+        await membershipApi.applyCoupon(code);
 
       setQuote(response);
+
+      setCode(response.couponCode || code);
+
     } catch (err) {
-      setError(err.message || "Unable to apply coupon.");
+
+      setError(
+        err.message || "Unable to apply coupon."
+      );
+
     } finally {
+
       setApplying(false);
+
+      actionLock.current = false;
     }
   }
 
-  async function handleActivate() {
+  // ==========================================
+  // REMOVE COUPON
+  // ==========================================
+
+  function handleRemoveCoupon() {
+
+    setCode("");
+
+    setQuote(null);
+
+    setError("");
+
+    setSuccess(null);
+  }
+
+  // ==========================================
+  // REFRESH MEMBERSHIP AFTER SUCCESS
+  // ==========================================
+
+  async function completeSuccess(result) {
+
+    setSuccess(result);
+
+    setError("");
+
+    setNotice("");
+
+    setPendingOrder(null);
+
+    setPendingVerification(null);
+
+    setCode("");
+
+    setQuote(null);
+
+    sessionStorage.removeItem(
+      PENDING_ORDER_KEY
+    );
+
+    try {
+
+      const dashboard =
+        await membershipApi.getDashboard();
+
+      setMembership(
+        dashboard?.membership ?? null
+      );
+
+    } catch {
+
+      setNotice(
+        "Payment completed. Refresh the page " +
+        "to see updated membership details."
+      );
+    }
+  }
+
+  // ==========================================
+  // CHECK PENDING PAYMENT STATUS
+  // ==========================================
+
+  async function handleCheckStatus() {
+
+    if (!pendingOrder?.orderId ||
+        actionLock.current) {
+      return;
+    }
+
+    actionLock.current = true;
+
+    setChecking(true);
+
+    setError("");
+
+    setNotice("");
+
+    try {
+
+      // Retry verification when the original
+      // Razorpay callback is still available.
+
+      if (pendingVerification) {
+
+        try {
+
+          const verified =
+            await membershipApi.verifyPayment(
+              pendingVerification
+            );
+
+          if (verified?.status === "SUCCESS") {
+
+            await completeSuccess(verified);
+
+            return;
+          }
+
+        } catch {
+          // Continue with server order status.
+        }
+      }
+
+      const order =
+        await membershipApi.getOrder(
+          pendingOrder.orderId
+        );
+
+      setPendingOrder(order);
+
+      if (order.status === "SUCCESS") {
+
+        await completeSuccess({
+
+          status: "SUCCESS",
+
+          orderId: order.orderId,
+
+          paidPaise: order.payablePaise,
+
+          message:
+            "Payment confirmed. Membership activated.",
+        });
+
+        return;
+      }
+
+      setNotice(
+        `Current order status: ${order.status}. ` +
+        "If money was debited, do not pay again. " +
+        "Wait for verification or contact support."
+      );
+
+    } catch (err) {
+
+      setError(
+        err.message || "Unable to check payment status."
+      );
+
+    } finally {
+
+      setChecking(false);
+
+      actionLock.current = false;
+    }
+  }
+
+  // ==========================================
+  // OPEN EXISTING OR NEW PAYMENT ORDER
+  // ==========================================
+
+  async function checkoutOrder(order) {
+
+    const checkout =
+      await openRazorpayCheckout(order);
+
+    if (checkout.status === "DISMISSED") {
+
+      setNotice(
+        "Checkout closed. Check your payment status " +
+        "before retrying the existing order."
+      );
+
+      return;
+    }
+
+    setPendingVerification(checkout.payload);
+
+    try {
+
+      const verified =
+        await membershipApi.verifyPayment(
+          checkout.payload
+        );
+
+      if (verified?.status !== "SUCCESS") {
+
+        throw new Error(
+          "Payment confirmation is pending."
+        );
+      }
+
+      await completeSuccess(verified);
+
+    } catch {
+
+      setNotice(
+        "Payment was submitted but confirmation is pending. " +
+        "Do not pay again. Use Check Payment Status."
+      );
+    }
+  }
+
+  // ==========================================
+  // START MEMBERSHIP CHECKOUT
+  // ==========================================
+
+  async function handlePayment() {
+
     if (
+      actionLock.current ||
       busy ||
-      success ||
-      !quote ||
-      Number(quote.payablePaise) !== 0
+      loading ||
+      !currentQuote ||
+      pendingOrder ||
+      couponNeedsApply
     ) {
       return;
     }
 
+    actionLock.current = true;
+
     setProcessing(true);
+
     setError("");
 
-    try {
-      await membershipApi.activateMembership(code);
+    setNotice("");
 
-      setSuccess(true);
-      await loadMembership();
-    } catch (err) {
-      setError(
-        err.message || "Membership activation failed."
+    setSuccess(null);
+
+    try {
+
+      // ======================================
+      // 100% COUPON REDEMPTION
+      // ======================================
+
+      if (isFree) {
+
+        const result =
+          await membershipApi.redeemCoupon(
+            currentQuote.couponCode
+          );
+
+        if (result?.status !== "SUCCESS") {
+
+          throw new Error(
+            "Membership activation is pending."
+          );
+        }
+
+        await completeSuccess(result);
+
+        return;
+      }
+
+      // ======================================
+      // REAL ONLINE PAYMENT
+      // ======================================
+
+      if (!onlineAvailable) {
+
+        throw new Error(
+          "Online payment is currently unavailable."
+        );
+      }
+
+      // Load SDK before creating a gateway order.
+
+      await loadRazorpayScript();
+
+      const order =
+        await membershipApi.createOrder(
+          currentQuote.couponCode || null
+        );
+
+      // Save the order before opening checkout.
+
+      setPendingOrder(order);
+
+      sessionStorage.setItem(
+
+        PENDING_ORDER_KEY,
+
+        String(order.orderId)
       );
+
+      // Do not silently charge a changed amount.
+
+      if (
+        order.payablePaise !== payable ||
+        order.currency !== currentQuote.currency ||
+        order.membershipDays !== membershipDays ||
+        order.planName !== planName
+      ) {
+
+        setNotice(
+          "The checkout price or plan has changed. " +
+          "Contact support before continuing."
+        );
+
+        return;
+      }
+
+      await checkoutOrder(order);
+
+    } catch (err) {
+
+      setError(
+        err.message ||
+        "Unable to complete payment. Check your payment history."
+      );
+
     } finally {
+
       setProcessing(false);
+
+      actionLock.current = false;
     }
   }
 
-  const originalPrice = quote?.originalPaise ?? 29900;
-  const discount = quote?.discountPaise ?? 0;
-  const payable = quote?.payablePaise ?? originalPrice;
+  // ==========================================
+  // LOADING STATE
+  // ==========================================
 
-  const discountPercent =
-    originalPrice > 0
-      ? Math.round((discount / originalPrice) * 100)
-      : 0;
+  if (loading) {
+
+    return (
+
+      <div className="mp-page">
+
+        <div className="mp-loading">
+
+          <LoaderCircle
+            size={34}
+            className="mp-spin"
+          />
+
+          <h3>Loading membership...</h3>
+
+          <p>Preparing your membership details.</p>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  // ==========================================
+  // LOAD ERROR STATE
+  // ==========================================
+
+  if (loadError) {
+
+    return (
+
+      <div className="mp-page">
+
+        <div className="mp-loading">
+
+          <AlertCircle size={36} />
+
+          <h3>Unable to load membership</h3>
+
+          <p>{loadError}</p>
+
+          <button
+            className="mp-primary-btn"
+            onClick={loadMembership}
+          >
+
+            <RefreshCw size={17} />
+
+            Try Again
+
+          </button>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  // ==========================================
+  // PAGE UI
+  // ==========================================
 
   return (
+
     <div className="mp-page">
 
-      {/* Page Heading */}
+      {/* PAGE HEADER */}
 
-      <header className="mp-page-header">
+      <div className="mp-page-header">
+
         <div>
-          <div className="mp-eyebrow">
-            <Crown size={15} />
-            MEMBERSHIP CENTER
-          </div>
 
-          <h1>My Membership</h1>
+          <span className="mp-eyebrow">
+            MEMBER SERVICES
+          </span>
+
+          <h1>Library Membership</h1>
 
           <p>
-            Manage your library membership and unlock
-            more reading opportunities.
+            Choose your membership and unlock
+            exclusive library benefits.
           </p>
+
         </div>
 
         <Link
           to="/member/payments"
-          className="mp-outline-btn"
+          className="mp-history-link"
         >
-          <ReceiptText size={18} />
-          Payment history
-        </Link>
-      </header>
 
-      {/* Welcome Banner */}
+          <ReceiptText size={18} />
+
+          Payment History
+
+          <ArrowRight size={16} />
+
+        </Link>
+
+      </div>
+
+      {/* HERO BANNER */}
 
       <section className="mp-hero">
+
         <div className="mp-hero-content">
 
-          <span className="mp-hero-label">
+          <span className="mp-hero-badge">
+
             <Sparkles size={15} />
+
             YOUR NEXT CHAPTER STARTS HERE
+
           </span>
 
           <h2>
-            A world of knowledge,
-            <span> just one membership away.</span>
+            Read More.
+            <br />
+            Discover More.
           </h2>
 
           <p>
-            Discover new books, build your reading habits
-            and enjoy all the benefits of Smart Library.
+            Get access to library borrowing,
+            digital membership and personalized
+            reading experiences.
           </p>
 
-          <div className="mp-hero-footer">
-            <ShieldCheck size={17} />
-            Your membership. Your reading journey.
+          <div className="mp-hero-features">
+
+            <span>
+              <BookOpen size={17} />
+              Library Access
+            </span>
+
+            <span>
+              <ShieldCheck size={17} />
+              Secure Membership
+            </span>
+
           </div>
+
         </div>
+
+        <div className="mp-hero-art">
+
+          <div className="mp-hero-ring">
+
+            <div className="mp-hero-icon">
+
+              <Crown size={65} strokeWidth={1.5} />
+
+            </div>
+
+          </div>
+
+        </div>
+
       </section>
 
-      {/* Current Membership */}
+      {/* CURRENT MEMBERSHIP */}
 
-      <section className="mp-current-section">
-        <div className="mp-section-heading">
-          <h2>Current membership</h2>
+      <section className="mp-current-card">
+
+        <div className="mp-current-main">
+
+          <div className="mp-current-icon">
+
+            <Crown size={25} />
+
+          </div>
+
+          <div>
+
+            <span className="mp-muted-label">
+              Current Membership
+            </span>
+
+            <h3>
+
+              {isActive
+                ? membership.planName
+                : "No Active Membership"}
+
+            </h3>
+
+          </div>
+
+        </div>
+
+        <div className="mp-current-detail">
+
+          <span className="mp-muted-label">
+            Status
+          </span>
+
+          <span
+            className={
+              `mp-status ${
+                isActive
+                  ? "mp-status-active"
+                  : "mp-status-inactive"
+              }`
+            }
+          >
+
+            <span className="mp-status-dot" />
+
+            {isActive
+              ? "Active"
+              : membership?.status === "SUSPENDED"
+                ? "Suspended"
+                : "Inactive"}
+
+          </span>
+
+        </div>
+
+        <div className="mp-current-detail">
+
+          <span className="mp-muted-label">
+            Valid Until
+          </span>
+
+          <strong>
+
+            {formatMembershipDate(
+              membership?.endDate
+            )}
+
+          </strong>
+
+        </div>
+
+        <div className="mp-current-detail">
+
+          <span className="mp-muted-label">
+            Remaining
+          </span>
+
+          <strong>
+
+            {isActive
+              ? `${membership?.daysRemaining ??
+                  membership?.remaining ?? 0} days`
+              : "—"}
+
+          </strong>
+
+        </div>
+
+      </section>
+
+      {/* SUCCESS MESSAGE */}
+
+      {success && (
+
+        <div className="mp-alert mp-alert-success">
+
+          <CheckCircle2 size={24} />
+
+          <div>
+
+            <strong>
+              Membership activated successfully!
+            </strong>
+
+            <p>
+              {success.transactionId
+                ? `Transaction ID: ${success.transactionId}`
+                : "Your payment has been confirmed."}
+            </p>
+
+            <Link to="/member/payments">
+              View Payment History
+            </Link>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ERROR MESSAGE */}
+
+      {error && (
+
+        <div className="mp-alert mp-alert-error">
+
+          <AlertCircle size={21} />
+
+          <div>{error}</div>
 
           <button
-            type="button"
-            className="mp-refresh-btn"
-            onClick={loadMembership}
-            disabled={loading || busy}
+            className="mp-icon-btn"
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
           >
-            <RefreshCw
-              size={16}
-              className={loading ? "mp-spin" : ""}
-            />
-            Refresh
+
+            <X size={18} />
+
           </button>
-        </div>
-
-        {loadError && (
-          <div className="mp-alert mp-alert-error">
-            <AlertCircle size={19} />
-            {loadError}
-          </div>
-        )}
-
-        <div className="mp-stats-grid">
-
-          <div className="mp-stat-card">
-            <div className="mp-stat-icon mp-purple">
-              <Crown size={23} />
-            </div>
-
-            <div>
-              <span>Current plan</span>
-              <h3>
-                {loading
-                  ? "Loading..."
-                  : loadError
-                  ? "Unavailable"
-                  : membership?.planName || "No membership"}
-              </h3>
-            </div>
-          </div>
-
-          <div className="mp-stat-card">
-            <div className="mp-stat-icon mp-green">
-              <ShieldCheck size={23} />
-            </div>
-
-            <div>
-              <span>Membership status</span>
-
-              <h3
-                className={
-                  membership?.valid && !loadError
-                    ? "mp-text-green"
-                    : ""
-                }
-              >
-                {loading
-                  ? "Loading..."
-                  : loadError
-                  ? "Unavailable"
-                  : membership?.status || "Not active"}
-              </h3>
-            </div>
-          </div>
-
-          <div className="mp-stat-card">
-            <div className="mp-stat-icon mp-orange">
-              <CalendarDays size={23} />
-            </div>
-
-            <div>
-              <span>Valid until</span>
-              <h3>
-                {loading || loadError
-                  ? "—"
-                  : formatMembershipDate(
-                      membership?.endDate
-                    )}
-              </h3>
-            </div>
-          </div>
-
-          <div className="mp-stat-card">
-            <div className="mp-stat-icon mp-blue">
-              <Clock3 size={23} />
-            </div>
-
-            <div>
-              <span>Days remaining</span>
-              <h3>
-                {loading || loadError
-                  ? "—"
-                  : `${membership?.remaining ?? 0} days`}
-              </h3>
-            </div>
-          </div>
 
         </div>
-      </section>
+      )}
 
-      {/* Membership Plan and Checkout */}
+      {/* PAYMENT NOTICE */}
 
-      <section className="mp-checkout-grid">
+      {notice && (
 
-        <article className="mp-plan-card">
+        <div className="mp-alert mp-alert-warning">
 
-          <div className="mp-plan-top">
+          <Clock3 size={21} />
+
+          <div>{notice}</div>
+
+        </div>
+      )}
+
+      {/* PENDING PAYMENT */}
+
+      {pendingOrder && (
+
+        <section className="mp-pending-card">
+
+          <div className="mp-pending-info">
+
+            <Clock3 size={24} />
+
+            <div>
+
+              <h3>Existing Payment Order</h3>
+
+              <p>
+                Order: {pendingOrder.orderReference ||
+                  pendingOrder.orderId}
+              </p>
+
+              <p>
+                Status: {pendingOrder.status}
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mp-pending-actions">
+
+            <button
+              className="mp-outline-btn"
+              onClick={handleCheckStatus}
+              disabled={busy}
+            >
+
+              <RefreshCw
+                size={17}
+                className={checking ? "mp-spin" : ""}
+              />
+
+              {checking
+                ? "Checking..."
+                : "Check Payment Status"}
+
+            </button>
+
+            <Link
+              to="/member/support"
+              className="mp-outline-btn"
+            >
+
+              Contact Support
+
+            </Link>
+
+          </div>
+
+        </section>
+      )}
+
+      {/* MEMBERSHIP CHECKOUT GRID */}
+
+      <div className="mp-checkout-grid">
+
+        {/* PLAN CARD */}
+
+        <section className="mp-card mp-plan-card">
+
+          <div className="mp-card-header">
+
             <div className="mp-plan-icon">
-              <Crown size={30} />
+
+              <Crown size={26} />
+
             </div>
 
-            <span className="mp-popular-tag">
+            <span className="mp-popular-badge">
+
               <Sparkles size={13} />
+
               RECOMMENDED
+
             </span>
+
           </div>
 
-          <h2>Premium Monthly</h2>
+          <h2>{planName}</h2>
 
           <p className="mp-plan-description">
             Everything you need for a better
@@ -332,245 +1016,419 @@ export default function MembershipPayment() {
           </p>
 
           <div className="mp-plan-price">
+
             <strong>
+
               {formatCurrency(originalPrice)}
+
             </strong>
-            <span>/ 30 days</span>
+
+            <span>
+              / {membershipDays} days
+            </span>
+
           </div>
 
-          <div className="mp-plan-divider" />
+          <div className="mp-plan-duration">
 
-          <h3>What's included</h3>
+            <CalendarDays size={17} />
+
+            {membershipDays}-day membership validity
+
+          </div>
+
+          <div className="mp-divider" />
+
+          <h3 className="mp-benefit-title">
+            What's included
+          </h3>
 
           <div className="mp-benefits">
+
             {benefits.map((benefit) => (
+
               <div
                 className="mp-benefit"
                 key={benefit}
               >
+
                 <CheckCircle2 size={19} />
+
                 <span>{benefit}</span>
+
               </div>
+
             ))}
+
           </div>
 
-          <div className="mp-plan-bottom">
-            <BookOpen size={21} />
+          {isActive && (
 
-            <div>
-              <strong>Read without limits</strong>
+            <div className="mp-renewal-note">
+
+              <CalendarDays size={19} />
+
               <p>
-                Explore the catalogue throughout
-                your active membership.
+                Renewing adds {membershipDays} days
+                to your existing valid membership.
               </p>
+
             </div>
-          </div>
+          )}
 
-        </article>
+        </section>
 
-        <article className="mp-order-card">
+        {/* CHECKOUT CARD */}
+
+        <section className="mp-card mp-order-card">
 
           <div className="mp-order-heading">
+
             <div className="mp-order-icon">
-              <CreditCard size={23} />
+
+              <CreditCard size={24} />
+
             </div>
 
             <div>
-              <h2>Order summary</h2>
-              <p>Review your membership purchase.</p>
-            </div>
-          </div>
 
-          <div className="mp-selected-plan">
-            <div>
-              <strong>Premium Monthly</strong>
-              <span>30-day membership</span>
+              <h2>Order Summary</h2>
+
+              <p>Complete your membership purchase.</p>
+
             </div>
 
-            <strong>
-              {formatCurrency(originalPrice)}
-            </strong>
           </div>
 
-          <form
-            className="mp-coupon-form"
-            onSubmit={handleApplyCoupon}
-          >
-            <label htmlFor="membership-coupon">
-              <TicketPercent size={18} />
-              Have a coupon code?
-            </label>
+          {/* OPTIONAL COUPON */}
 
-            <div className="mp-coupon-input">
+          <div className="mp-coupon-section">
+
+            <div className="mp-coupon-heading">
+
+              <TicketPercent size={20} />
+
+              <strong>Have a coupon?</strong>
+
+              <span>Optional</span>
+
+            </div>
+
+            <form
+              className="mp-coupon-form"
+              onSubmit={handleApplyCoupon}
+            >
+
               <input
-                id="membership-coupon"
                 type="text"
-                placeholder="Enter coupon code"
                 value={code}
                 onChange={handleCodeChange}
+                placeholder="Enter coupon code"
                 maxLength={40}
-                disabled={busy}
-                autoComplete="off"
-                required
+                disabled={busy || Boolean(pendingOrder)}
+                aria-label="Coupon code"
               />
 
               <button
                 type="submit"
-                disabled={busy || !code.trim()}
+                className="mp-apply-btn"
+                disabled={
+                  busy ||
+                  Boolean(pendingOrder) ||
+                  !code.trim() ||
+                  couponApplied
+                }
               >
+
                 {applying ? (
+
                   <LoaderCircle
-                    size={18}
+                    size={17}
                     className="mp-spin"
                   />
-                ) : (
-                  "Apply"
-                )}
+
+                ) : "Apply"}
+
               </button>
-            </div>
-          </form>
 
-          {quote && (
-            <div className="mp-alert mp-alert-success">
-              <CheckCircle2 size={20} />
+            </form>
 
-              <div>
-                <strong>Coupon applied!</strong>
-                <span>
-                  You received a {discountPercent}% discount.
-                </span>
+            {couponApplied && (
+
+              <div className="mp-coupon-applied">
+
+                <CheckCircle2 size={18} />
+
+                <div>
+
+                  <strong>{quote.couponCode}</strong>
+
+                  <span>
+                    {quote.discountPercent}% discount applied
+                  </span>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="mp-icon-btn"
+                  onClick={handleRemoveCoupon}
+                  disabled={busy || Boolean(pendingOrder)}
+                  aria-label="Remove coupon"
+                >
+
+                  <X size={18} />
+
+                </button>
+
               </div>
-            </div>
-          )}
+            )}
 
-          {error && (
-            <div
-              className="mp-alert mp-alert-error"
-              role="alert"
-            >
-              <AlertCircle size={20} />
-              {error}
-            </div>
-          )}
+          </div>
+
+          {/* PRICE BREAKDOWN */}
 
           <div className="mp-price-breakdown">
 
             <div className="mp-price-row">
+
               <span>Membership price</span>
+
               <strong>
                 {formatCurrency(originalPrice)}
               </strong>
+
             </div>
 
             <div className="mp-price-row">
+
               <span>Coupon discount</span>
-              <strong className="mp-text-green">
-                − {formatCurrency(discount)}
+
+              <strong className="mp-discount">
+
+                −{formatCurrency(discount)}
+
               </strong>
+
             </div>
 
-            <div className="mp-price-divider" />
+            <div className="mp-price-row">
 
-            <div className="mp-total-row">
-              <div>
-                <strong>Total payable</strong>
-                <span>Final membership amount</span>
-              </div>
+              <span>Membership duration</span>
 
-              <h2>{formatCurrency(payable)}</h2>
+              <strong>{membershipDays} days</strong>
+
             </div>
 
           </div>
 
-          {quote &&
-            Number(quote.payablePaise) !== 0 && (
-              <div className="mp-alert mp-alert-warning">
-                <AlertCircle size={19} />
-                Demo checkout requires a 100% discount
-                coupon.
-              </div>
+          <div className="mp-total-box">
+
+            <div>
+
+              <span>Total payable</span>
+
+              <strong>
+                {formatCurrency(payable)}
+              </strong>
+
+            </div>
+
+            {discount > 0 && (
+
+              <span className="mp-savings-badge">
+
+                Save {formatCurrency(discount)}
+
+              </span>
             )}
 
-          {!success && (
-            <button
-              type="button"
-              className="mp-activate-btn"
-              onClick={handleActivate}
-              disabled={
-                busy ||
-                !quote ||
-                Number(quote.payablePaise) !== 0
-              }
-            >
-              {processing ? (
-                <>
-                  <LoaderCircle
-                    size={20}
-                    className="mp-spin"
-                  />
-                  Activating membership...
-                </>
-              ) : (
-                <>
-                  Activate membership
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-          )}
+          </div>
 
-          {success && (
-            <div
-              className="mp-success-box"
-              role="status"
-            >
-              <CheckCircle2 size={40} />
+          {/* PAYMENT METHOD */}
 
-              <h3>Membership activated!</h3>
+          {!isFree && (
 
-              <p>
-                Your coupon redemption was successful.
-              </p>
+            <div className="mp-payment-methods">
 
-              <Link to="/member/payments">
-                <ReceiptText size={17} />
-                View payment history
-              </Link>
+              <span>Supported payment methods</span>
+
+              <div className="mp-method-list">
+
+                <div>
+
+                  <Smartphone size={19} />
+
+                  UPI
+
+                </div>
+
+                <div>
+
+                  <CreditCard size={19} />
+
+                  Cards
+
+                </div>
+
+                <div>
+
+                  <Landmark size={19} />
+
+                  Net Banking
+
+                </div>
+
+              </div>
+
             </div>
           )}
 
+          {/* FREE COUPON NOTE */}
+
+          {isFree && (
+
+            <div className="mp-free-note">
+
+              <CheckCircle2 size={21} />
+
+              <div>
+
+                <strong>100% discount applied!</strong>
+
+                <p>
+                  No online payment required.
+                  Activate your membership directly.
+                </p>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ONLINE PAYMENT AVAILABILITY */}
+
+          {!isFree && !onlineAvailable && (
+
+            <div className="mp-alert mp-alert-warning">
+
+              <AlertCircle size={19} />
+
+              <div>
+                Online payment is currently unavailable.
+              </div>
+
+            </div>
+          )}
+
+          {couponNeedsApply && (
+
+            <p className="mp-input-hint">
+
+              Apply the coupon or clear the input
+              before continuing.
+
+            </p>
+          )}
+
+          {/* PAY BUTTON */}
+
+          <button
+            type="button"
+            className="mp-pay-btn"
+            onClick={handlePayment}
+            disabled={
+              busy ||
+              !currentQuote ||
+              Boolean(pendingOrder) ||
+              couponNeedsApply ||
+              (!isFree && !onlineAvailable)
+            }
+          >
+
+            {processing ? (
+
+              <>
+
+                <LoaderCircle
+                  size={21}
+                  className="mp-spin"
+                />
+
+                Processing...
+
+              </>
+
+            ) : (
+
+              <>
+
+                {isFree
+                  ? <Crown size={21} />
+                  : <LockKeyhole size={20} />}
+
+                {isFree
+
+                  ? "Activate Membership"
+
+                  : `Pay ${formatCurrency(payable)}`}
+
+                <ArrowRight size={19} />
+
+              </>
+
+            )}
+
+          </button>
+
+          {/* SECURE PAYMENT */}
+
           <div className="mp-secure-note">
-            <LockKeyhole size={16} />
-            Demo checkout. No real money is collected.
+
+            <ShieldCheck size={21} />
+
+            <div>
+
+              <strong>Secure checkout</strong>
+
+              <p>
+
+                {isFree
+
+                  ? "Coupon verified by Smart Library."
+
+                  : "Online payments processed securely through Razorpay."}
+
+              </p>
+
+            </div>
+
           </div>
 
-        </article>
-      </section>
+        </section>
 
-      {/* Information Footer */}
+      </div>
 
-      <section className="mp-help-banner">
-        <div className="mp-help-icon">
-          <ShieldCheck size={26} />
-        </div>
+      {/* FOOTER */}
 
-        <div>
-          <h3>Need help with your membership?</h3>
+      <div className="mp-footer">
 
-          <p>
-            Contact library support for coupon,
-            membership or account-related questions.
-          </p>
-        </div>
+        <ShieldCheck size={18} />
 
-        <Link
-          to="/member/support"
-          className="mp-outline-btn"
-        >
-          Contact support
-          <ArrowRight size={17} />
+        <span>
+          Your membership activates only after
+          successful server-side verification.
+        </span>
+
+        <Link to="/member/support">
+
+          Need help?
+
+          <ArrowRight size={15} />
+
         </Link>
-      </section>
+
+      </div>
 
     </div>
   );

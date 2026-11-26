@@ -9,26 +9,30 @@ import { Link } from "react-router-dom";
 import {
   Wallet,
   ReceiptText,
-  CreditCard,
   TicketPercent,
-  Download,
-  Search,
-  RefreshCw,
-  ArrowRight,
-  Plus,
-  ShieldCheck,
-  CalendarDays,
   CheckCircle2,
+  CreditCard,
+  Search,
+  Download,
+  Eye,
+  RefreshCw,
   AlertCircle,
-  LoaderCircle,
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
+  ShieldCheck,
   X,
-  Eye,
+  Smartphone,
+  Landmark,
 } from "lucide-react";
 
 import {
   paymentHistoryApi,
+  getPaymentStatus,
+  getTransactionId,
+  getPaymentMethod,
+  canDownloadReceipt,
   formatMoney,
   formatPaymentDate,
 } from "../../services/paymentHistoryApi";
@@ -37,161 +41,469 @@ import "../../styles/member/PaymentHistory.css";
 
 const PAGE_SIZE = 6;
 
-function getTransactionId(payment) {
+// ==========================================
+// PAYMENT METHOD ICON
+// ==========================================
+
+function MethodIcon({ payment }) {
+
+  const method = String(
+    payment?.paymentMethod || ""
+  ).toUpperCase();
+
+  if (method === "UPI") {
+    return <Smartphone size={20} />;
+  }
+
+  if (method === "NETBANKING") {
+    return <Landmark size={20} />;
+  }
+
+  if (
+    method === "COUPON" ||
+    method === "DEMO_COUPON"
+  ) {
+    return <TicketPercent size={20} />;
+  }
+
+  return <CreditCard size={20} />;
+}
+
+// ==========================================
+// PAYMENT STATUS
+// ==========================================
+
+function PaymentStatus({ status }) {
+
+  const className =
+    status === "SUCCESS"
+      ? "success"
+      : status === "FAILED"
+        ? "danger"
+        : status === "REFUNDED"
+          ? "neutral"
+          : "warning";
+
   return (
-    payment.transactionId ||
-    `SLM-DEMO-${String(payment.id).padStart(8, "0")}`
+
+    <span className={`ph-status ph-status-${className}`}>
+
+      {status === "SUCCESS" && (
+        <CheckCircle2 size={13} />
+      )}
+
+      {status === "SUCCESS"
+        ? "Successful"
+        : status.replaceAll("_", " ")}
+
+    </span>
   );
 }
 
-function getPaymentStatus(payment) {
-  if (payment.status) {
-    return String(payment.status).toUpperCase();
-  }
+// ==========================================
+// RECEIPT DETAIL ROW
+// ==========================================
 
-  const original = Number(payment.originalPaise);
-  const discount = Number(payment.discountPaise);
-  const paid = Number(payment.paidPaise);
+function Detail({ label, value }) {
 
-  return original > 0 &&
-    discount === original &&
-    paid === 0 &&
-    payment.membershipId != null
-    ? "SUCCESS"
-    : "UNVERIFIED";
+  return (
+
+    <div className="ph-detail-row">
+
+      <span>{label}</span>
+
+      <strong>{value ?? "—"}</strong>
+
+    </div>
+  );
 }
 
+// ==========================================
+// RECEIPT MODAL
+// ==========================================
+
+function ReceiptModal({
+  receipt,
+  onClose,
+  onDownload,
+  downloading,
+}) {
+
+  useEffect(() => {
+
+    function onKeyDown(event) {
+
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener(
+      "keydown",
+      onKeyDown
+    );
+
+    return () => document.removeEventListener(
+      "keydown",
+      onKeyDown
+    );
+
+  }, [onClose]);
+
+  return (
+
+    <div
+      className="ph-modal-overlay"
+      onClick={onClose}
+    >
+
+      <section
+        className="ph-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ph-receipt-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+
+        <div className="ph-modal-header">
+
+          <div className="ph-modal-icon">
+
+            <ReceiptText size={25} />
+
+          </div>
+
+          <div>
+
+            <h2 id="ph-receipt-title">
+              Payment Receipt
+            </h2>
+
+            <p>{receipt.receiptNumber}</p>
+
+          </div>
+
+          <button
+            className="ph-close-btn"
+            onClick={onClose}
+            aria-label="Close receipt"
+            autoFocus
+          >
+
+            <X size={21} />
+
+          </button>
+
+        </div>
+
+        <div className="ph-modal-body">
+
+          <div className="ph-receipt-success">
+
+            <CheckCircle2 size={20} />
+
+            Payment successfully verified
+
+          </div>
+
+          <h3>Member Details</h3>
+
+          <Detail
+            label="Member name"
+            value={receipt.memberName}
+          />
+
+          <Detail
+            label="Email"
+            value={receipt.email}
+          />
+
+          <Detail
+            label="Member ID"
+            value={receipt.userId}
+          />
+
+          <h3>Membership Details</h3>
+
+          <Detail
+            label="Plan"
+            value={receipt.membershipPlan}
+          />
+
+          <Detail
+            label="Valid from"
+            value={formatPaymentDate(
+              receipt.membershipStartDate
+            )}
+          />
+
+          <Detail
+            label="Valid until"
+            value={formatPaymentDate(
+              receipt.membershipEndDate
+            )}
+          />
+
+          <h3>Payment Details</h3>
+
+          <Detail
+            label="Transaction ID"
+            value={receipt.transactionId}
+          />
+
+          <Detail
+            label="Payment date"
+            value={formatPaymentDate(
+              receipt.paymentDate
+            )}
+          />
+
+          <Detail
+            label="Payment method"
+            value={getPaymentMethod(receipt)}
+          />
+
+          <Detail
+            label="Coupon code"
+            value={receipt.couponCode || "Not applied"}
+          />
+
+          <Detail
+            label="Original price"
+            value={formatMoney(receipt.originalPaise)}
+          />
+
+          <Detail
+            label="Discount"
+            value={`−${formatMoney(
+              receipt.discountPaise
+            )}`}
+          />
+
+          <div className="ph-receipt-total">
+
+            <span>Total Paid</span>
+
+            <strong>
+              {formatMoney(receipt.paidPaise)}
+            </strong>
+
+          </div>
+
+        </div>
+
+        <div className="ph-modal-footer">
+
+          <button
+            className="ph-outline-btn"
+            onClick={onClose}
+          >
+
+            Close
+
+          </button>
+
+          <button
+            className="ph-primary-btn"
+            onClick={() => onDownload(receipt.paymentId)}
+            disabled={downloading}
+          >
+
+            {downloading
+              ? <LoaderCircle size={17} className="ph-spin" />
+              : <Download size={17} />}
+
+            Download PDF
+
+          </button>
+
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+// ==========================================
+// PAYMENT HISTORY PAGE
+// ==========================================
+
 export default function PaymentHistory() {
+
   const [payments, setPayments] = useState([]);
+
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState("");
+
   const [actionError, setActionError] = useState("");
 
   const [search, setSearch] = useState("");
+
   const [statusFilter, setStatusFilter] =
+    useState("ALL");
+
+  const [methodFilter, setMethodFilter] =
     useState("ALL");
 
   const [page, setPage] = useState(1);
 
-  const [downloading, setDownloading] =
-    useState(null);
-
-  const [detailsLoading, setDetailsLoading] =
-    useState(null);
-
   const [selectedReceipt, setSelectedReceipt] =
     useState(null);
 
+  const [viewingId, setViewingId] =
+    useState(null);
+
+  const [downloadingId, setDownloadingId] =
+    useState(null);
+
+  // ==========================================
+  // LOAD PAYMENTS
+  // ==========================================
+
   async function loadPayments() {
+
     setLoading(true);
+
     setError("");
 
     try {
+
       const response =
         await paymentHistoryApi.getPayments();
 
-      const records = Array.isArray(response)
-        ? response
-        : response?.content;
+      const list = Array.isArray(response)
 
-      if (!Array.isArray(records)) {
-        throw new Error("Invalid payment history response.");
+        ? response
+
+        : Array.isArray(response?.content)
+
+          ? response.content
+
+          : null;
+
+      if (!list) {
+
+        throw new Error(
+          "Invalid payment history response."
+        );
       }
 
-      setPayments(records);
-      setPage(1);
+      setPayments(list);
+
     } catch (err) {
+
       setError(
-        err.message || "Unable to load payment history."
+        err.message ||
+        "Unable to load payment history."
       );
+
     } finally {
+
       setLoading(false);
     }
   }
 
   useEffect(() => {
+
     loadPayments();
+
   }, []);
 
   useEffect(() => {
+
     setPage(1);
-  }, [search, statusFilter]);
 
-  useEffect(() => {
-    if (!selectedReceipt) return;
+  }, [search, statusFilter, methodFilter]);
 
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        setSelectedReceipt(null);
-      }
-    }
+  // ==========================================
+  // PAYMENT STATISTICS
+  // ==========================================
 
-    window.addEventListener("keydown", handleEscape);
+  const stats = useMemo(() => {
 
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        handleEscape
-      );
-  }, [selectedReceipt]);
-
-  const summary = useMemo(() => {
     const successful = payments.filter(
-      (payment) =>
-        getPaymentStatus(payment) === "SUCCESS"
+      (payment) => canDownloadReceipt(payment)
     );
 
     return {
-      totalTransactions: payments.length,
 
-      totalPaid: successful.reduce(
-        (total, payment) =>
-          total + Number(payment.paidPaise || 0),
-        0
-      ),
-
-      totalSavings: successful.reduce(
-        (total, payment) =>
-          total + Number(payment.discountPaise || 0),
-        0
-      ),
+      total: payments.length,
 
       successful: successful.length,
+
+      paid: successful.reduce(
+        (sum, payment) =>
+          sum + Number(payment.paidPaise || 0),
+        0
+      ),
+
+      savings: successful.reduce(
+        (sum, payment) =>
+          sum + Number(payment.discountPaise || 0),
+        0
+      ),
     };
+
   }, [payments]);
 
+  // ==========================================
+  // SEARCH AND FILTER
+  // ==========================================
+
   const filteredPayments = useMemo(() => {
+
     const query = search.trim().toLowerCase();
 
-    return payments
-      .filter((payment) => {
-        const status = getPaymentStatus(payment);
+    return payments.filter((payment) => {
 
-        const matchesStatus =
-          statusFilter === "ALL" ||
-          status === statusFilter;
+      const status = getPaymentStatus(payment);
 
-        const searchable = [
-          getTransactionId(payment),
-          payment.couponCode,
-          payment.id,
-          payment.membershipId,
-          payment.createdAt,
-          "Monthly membership",
-        ]
-          .filter((value) => value != null)
-          .join(" ")
-          .toLowerCase();
+      const method = String(
+        payment.paymentMethod || ""
+      ).toUpperCase();
 
-        return (
-          matchesStatus &&
-          searchable.includes(query)
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        statusFilter === status;
+
+      const matchesMethod =
+        methodFilter === "ALL" ||
+        methodFilter === method ||
+        (
+          methodFilter === "COUPON" &&
+          method === "DEMO_COUPON"
         );
-      })
-      .sort(
-        (a, b) => Number(b.id) - Number(a.id)
+
+      const searchable = [
+
+        getTransactionId(payment),
+
+        getPaymentMethod(payment),
+
+        payment.couponCode,
+
+        payment.id,
+
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      return (
+
+        matchesStatus &&
+
+        matchesMethod &&
+
+        searchable.includes(query)
       );
-  }, [payments, search, statusFilter]);
+    });
+
+  }, [
+    payments,
+    search,
+    statusFilter,
+    methodFilter,
+  ]);
 
   const totalPages = Math.max(
     1,
@@ -201,758 +513,681 @@ export default function PaymentHistory() {
   const currentPage = Math.min(page, totalPages);
 
   const visiblePayments = filteredPayments.slice(
+
     (currentPage - 1) * PAGE_SIZE,
+
     currentPage * PAGE_SIZE
   );
 
-  async function handleDownload(paymentId) {
-    if (downloading !== null) return;
-
-    setDownloading(paymentId);
-    setActionError("");
-
-    try {
-      await paymentHistoryApi.downloadReceipt(
-        paymentId
-      );
-    } catch (err) {
-      setActionError(
-        err.message || "Unable to download receipt."
-      );
-    } finally {
-      setDownloading(null);
-    }
-  }
+  // ==========================================
+  // VIEW RECEIPT
+  // ==========================================
 
   async function handleViewReceipt(paymentId) {
-    if (detailsLoading !== null) return;
 
-    setDetailsLoading(paymentId);
+    if (viewingId !== null) return;
+
+    setViewingId(paymentId);
+
     setActionError("");
 
     try {
+
       const receipt =
         await paymentHistoryApi.getReceiptDetails(
           paymentId
         );
 
       setSelectedReceipt(receipt);
+
     } catch (err) {
+
       setActionError(
         err.message || "Unable to load receipt."
       );
+
     } finally {
-      setDetailsLoading(null);
+
+      setViewingId(null);
     }
   }
 
-  const stats = [
+  // ==========================================
+  // DOWNLOAD RECEIPT
+  // ==========================================
+
+  async function handleDownload(paymentId) {
+
+    if (downloadingId !== null) return;
+
+    setDownloadingId(paymentId);
+
+    setActionError("");
+
+    try {
+
+      await paymentHistoryApi.downloadReceipt(
+        paymentId
+      );
+
+    } catch (err) {
+
+      setSelectedReceipt(null);
+
+      setActionError(
+        err.message || "Receipt download failed."
+      );
+
+    } finally {
+
+      setDownloadingId(null);
+    }
+  }
+
+  const statCards = [
+
     {
-      label: "Total transactions",
-      value: summary.totalTransactions,
+      label: "Total Transactions",
+      value: stats.total,
       icon: ReceiptText,
       color: "purple",
-      description: "All membership transactions",
     },
+
     {
-      label: "Total amount paid",
-      value: formatMoney(summary.totalPaid),
+      label: "Total Paid",
+      value: formatMoney(stats.paid),
       icon: Wallet,
-      color: "green",
-      description: "Successful transactions",
+      color: "purple",
     },
+
     {
-      label: "Total savings",
-      value: formatMoney(summary.totalSavings),
+      label: "Coupon Savings",
+      value: formatMoney(stats.savings),
       icon: TicketPercent,
       color: "orange",
-      description: "Savings through coupons",
     },
+
     {
-      label: "Successful payments",
-      value: summary.successful,
+      label: "Successful Payments",
+      value: stats.successful,
       icon: CheckCircle2,
-      color: "blue",
-      description: "Completed transactions",
+      color: "green",
     },
   ];
 
+  // ==========================================
+  // PAGE UI
+  // ==========================================
+
   return (
+
     <div className="ph-page">
 
-      {/* Page Header */}
+      <header className="ph-page-header">
 
-      <header className="ph-header">
         <div>
-          <div className="ph-eyebrow">
-            <Wallet size={15} />
-            BILLING & TRANSACTIONS
-          </div>
+
+          <span className="ph-eyebrow">
+            MEMBER SERVICES
+          </span>
 
           <h1>Payment History</h1>
 
           <p>
-            Manage your membership transactions
-            and download payment receipts.
+            Manage your membership payments and receipts.
           </p>
+
         </div>
 
         <Link
-          to="/member/membership/payment"
           className="ph-primary-btn"
+          to="/member/membership/payment"
         >
-          <Plus size={18} />
-          Buy membership
+
+          Buy Membership
+
+          <ArrowRight size={17} />
+
         </Link>
+
       </header>
 
-      {/* Hero Banner */}
-
       <section className="ph-hero">
-        <div className="ph-hero-content">
+
+        <div>
+
           <span className="ph-hero-label">
+
             <ShieldCheck size={15} />
-            YOUR BILLING CENTER
+
+            SECURE TRANSACTIONS
+
           </span>
 
           <h2>
-            Every transaction.
-            <span> One place.</span>
+            Every payment.
+            <br />
+            All in one place.
           </h2>
 
           <p>
-            Stay informed about your membership
-            payments, coupon savings and receipts.
+            Track online payments, coupon savings
+            and download your membership receipts.
           </p>
 
-          <div className="ph-hero-note">
-            <CheckCircle2 size={17} />
-            Secure membership transaction records
-          </div>
         </div>
 
-        <div
-          className="ph-hero-art"
-          aria-hidden="true"
-        >
-          <div className="ph-art-circle" />
+        <div className="ph-hero-art">
 
-          <div className="ph-art-card">
-            <CreditCard size={40} />
-          </div>
+          <Wallet size={65} strokeWidth={1.5} />
 
-          <div className="ph-art-receipt">
-            <ReceiptText size={65} />
-          </div>
-
-          <div className="ph-art-check">
-            <CheckCircle2 size={31} />
-          </div>
         </div>
+
       </section>
 
-      {/* Statistics */}
+      <section className="ph-stats">
 
-      <section className="ph-stats-grid">
-        {stats.map((stat) => {
+        {statCards.map((stat) => {
+
           const Icon = stat.icon;
 
           return (
+
             <article
               className="ph-stat-card"
               key={stat.label}
             >
+
               <div
-                className={
-                  `ph-stat-icon ph-${stat.color}`
-                }
+                className={`ph-stat-icon ph-${stat.color}`}
               >
-                <Icon size={23} />
+
+                <Icon size={22} />
+
               </div>
 
               <span>{stat.label}</span>
 
-              <h2>
-                {loading
-                  ? "..."
-                  : error
-                  ? "—"
-                  : stat.value}
-              </h2>
+              <strong>
+                {loading || error ? "—" : stat.value}
+              </strong>
 
-              <p>{stat.description}</p>
             </article>
           );
         })}
+
       </section>
 
-      {/* Transaction History */}
+      {actionError && (
+
+        <div className="ph-error">
+
+          <AlertCircle size={20} />
+
+          <span>{actionError}</span>
+
+          <button
+            onClick={() => setActionError("")}
+            aria-label="Dismiss error"
+          >
+
+            <X size={17} />
+
+          </button>
+
+        </div>
+      )}
 
       <section className="ph-transactions">
 
         <div className="ph-section-header">
+
           <div>
-            <h2>Transaction history</h2>
+
+            <h2>Membership Transactions</h2>
 
             <p>
-              View your membership payment records.
+              View all your completed payment records.
             </p>
+
           </div>
 
           <button
-            type="button"
             className="ph-outline-btn"
             onClick={loadPayments}
             disabled={loading}
           >
+
             <RefreshCw
               size={16}
               className={loading ? "ph-spin" : ""}
             />
+
             Refresh
+
           </button>
+
         </div>
 
-        {/* Search and Filters */}
-
         <div className="ph-filters">
+
           <div className="ph-search">
-            <Search size={19} />
+
+            <Search size={18} />
 
             <input
-              type="search"
-              placeholder="Search transaction or coupon..."
-              aria-label="Search transactions"
               value={search}
               onChange={(event) =>
                 setSearch(event.target.value)
               }
+              placeholder="Search transaction or coupon..."
+              aria-label="Search payments"
             />
+
           </div>
 
           <select
-            aria-label="Filter payment status"
+            value={methodFilter}
+            onChange={(event) =>
+              setMethodFilter(event.target.value)
+            }
+            aria-label="Payment method"
+          >
+
+            <option value="ALL">All methods</option>
+
+            <option value="UPI">UPI</option>
+
+            <option value="CARD">Credit / Debit Card</option>
+
+            <option value="NETBANKING">Net Banking</option>
+
+            <option value="WALLET">Wallet</option>
+
+            <option value="COUPON">Coupon</option>
+
+            <option value="RAZORPAY">Razorpay</option>
+
+          </select>
+
+          <select
             value={statusFilter}
             onChange={(event) =>
               setStatusFilter(event.target.value)
             }
+            aria-label="Payment status"
           >
-            <option value="ALL">
-              All statuses
+
+            <option value="ALL">All statuses</option>
+
+            <option value="SUCCESS">Successful</option>
+
+            <option value="UNVERIFIED">Unverified</option>
+
+            <option value="FAILED">Failed</option>
+
+            <option value="REFUNDED">Refunded</option>
+
+            <option value="REFUND_PENDING">
+              Refund Pending
             </option>
 
-            <option value="SUCCESS">
-              Successful
-            </option>
-
-            <option value="UNVERIFIED">
-              Unverified
-            </option>
           </select>
+
         </div>
 
-        {/* Errors */}
+        {loading ? (
 
-        {error && (
-          <div className="ph-error" role="alert">
-            <AlertCircle size={20} />
+          <div className="ph-empty">
 
-            <div>
-              <strong>
-                Unable to load transactions
-              </strong>
-
-              <p>{error}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={loadPayments}
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {actionError && (
-          <div className="ph-error" role="alert">
-            <AlertCircle size={20} />
-            <p>{actionError}</p>
-
-            <button
-              type="button"
-              onClick={() => setActionError("")}
-              aria-label="Dismiss error"
-            >
-              <X size={17} />
-            </button>
-          </div>
-        )}
-
-        {/* Loading */}
-
-        {loading && (
-          <div className="ph-loading">
             <LoaderCircle
-              size={32}
+              size={35}
               className="ph-spin"
             />
 
-            <p>Loading your transactions...</p>
+            <h3>Loading transactions...</h3>
+
           </div>
-        )}
 
-        {/* Empty State */}
+        ) : error ? (
 
-        {!loading &&
-          !error &&
-          payments.length === 0 && (
-            <div className="ph-empty">
+          <div className="ph-empty">
 
-              <div className="ph-empty-illustration">
-                <ReceiptText size={52} />
+            <AlertCircle size={35} />
 
-                <div className="ph-empty-small">
-                  <Wallet size={23} />
-                </div>
-              </div>
+            <h3>Unable to load transactions</h3>
 
-              <h3>No transactions yet</h3>
+            <p>{error}</p>
 
-              <p>
-                Your membership payments will appear
-                here once you complete your first
-                coupon redemption.
-              </p>
+            <button
+              className="ph-primary-btn"
+              onClick={loadPayments}
+            >
 
-              <Link
-                to="/member/membership/payment"
-                className="ph-primary-btn"
-              >
-                Explore membership
-                <ArrowRight size={17} />
-              </Link>
-            </div>
-          )}
+              Try Again
 
-        {/* No Search Results */}
+            </button>
 
-        {!loading &&
-          !error &&
-          payments.length > 0 &&
-          filteredPayments.length === 0 && (
-            <div className="ph-empty">
-              <div className="ph-empty-illustration">
-                <Search size={45} />
-              </div>
+          </div>
 
-              <h3>No matching transactions</h3>
+        ) : visiblePayments.length === 0 ? (
 
-              <p>
-                Try another search or change the
-                selected status.
-              </p>
+          <div className="ph-empty">
+
+            <ReceiptText size={43} />
+
+            <h3>
+
+              {payments.length
+                ? "No matching transactions"
+                : "No transactions yet"}
+
+            </h3>
+
+            <p>
+
+              {payments.length
+
+                ? "Try changing your search or filters."
+
+                : "Your membership payments will appear here."}
+
+            </p>
+
+            {payments.length ? (
 
               <button
-                type="button"
                 className="ph-outline-btn"
                 onClick={() => {
+
                   setSearch("");
+
+                  setMethodFilter("ALL");
+
                   setStatusFilter("ALL");
                 }}
               >
-                Clear filters
+
+                Clear Filters
+
               </button>
-            </div>
-          )}
 
-        {/* Transaction Table */}
+            ) : (
 
-        {!loading &&
-          !error &&
-          visiblePayments.length > 0 && (
-            <>
-              <div className="ph-table-wrapper">
+              <Link
+                className="ph-primary-btn"
+                to="/member/membership/payment"
+              >
 
-                <table className="ph-table">
-                  <thead>
-                    <tr>
-                      <th>Transaction</th>
-                      <th>Date</th>
-                      <th>Coupon</th>
-                      <th>Discount</th>
-                      <th>Paid amount</th>
-                      <th>Status</th>
-                      <th>Receipt</th>
-                    </tr>
-                  </thead>
+                Buy Membership
 
-                  <tbody>
-                    {visiblePayments.map((payment) => {
-                      const status =
-                        getPaymentStatus(payment);
+              </Link>
 
-                      const successful =
-                        status === "SUCCESS";
+            )}
 
-                      return (
-                        <tr key={payment.id}>
+          </div>
 
-                          <td>
-                            <div className="ph-transaction-name">
-                              <div className="ph-transaction-icon">
-                                <CreditCard size={21} />
-                              </div>
+        ) : (
 
-                              <div>
-                                <strong>
-                                  Monthly membership
-                                </strong>
+          <>
 
-                                <span>
-                                  {getTransactionId(
-                                    payment
-                                  )}
-                                </span>
-                              </div>
+            <div className="ph-table-wrap">
+
+              <table className="ph-table">
+
+                <thead>
+
+                  <tr>
+
+                    <th>Transaction</th>
+
+                    <th>Method</th>
+
+                    <th>Coupon</th>
+
+                    <th>Discount</th>
+
+                    <th>Paid Amount</th>
+
+                    <th>Status</th>
+
+                    <th>Receipt</th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {visiblePayments.map((payment) => {
+
+                    const available =
+                      canDownloadReceipt(payment);
+
+                    return (
+
+                      <tr key={payment.id}>
+
+                        <td>
+
+                          <div className="ph-transaction">
+
+                            <div className="ph-transaction-icon">
+
+                              <MethodIcon payment={payment} />
+
                             </div>
-                          </td>
 
-                          <td>
-                            <div className="ph-date">
-                              <CalendarDays size={15} />
+                            <div>
 
-                              {formatPaymentDate(
-                                payment.createdAt
-                              )}
+                              <strong>
+                                {getTransactionId(payment)}
+                              </strong>
+
+                              <span>
+                                {formatPaymentDate(
+                                  payment.createdAt
+                                )}
+                              </span>
+
                             </div>
-                          </td>
 
-                          <td>
+                          </div>
+
+                        </td>
+
+                        <td>
+                          {getPaymentMethod(payment)}
+                        </td>
+
+                        <td>
+
+                          {payment.couponCode ? (
+
                             <span className="ph-coupon">
-                              <TicketPercent size={14} />
 
-                              {payment.couponCode || "—"}
+                              <TicketPercent size={13} />
+
+                              {payment.couponCode}
+
                             </span>
-                          </td>
 
-                          <td>
-                            <strong className="ph-saving">
-                              {formatMoney(
-                                payment.discountPaise
-                              )}
-                            </strong>
-                          </td>
+                          ) : "—"}
 
-                          <td>
-                            <strong>
-                              {formatMoney(
-                                payment.paidPaise
-                              )}
-                            </strong>
-                          </td>
+                        </td>
 
-                          <td>
-                            <span
-                              className={
-                                successful
-                                  ? "ph-status ph-status-success"
-                                  : "ph-status ph-status-warning"
-                              }
-                            >
-                              {successful ? (
-                                <CheckCircle2 size={13} />
-                              ) : (
-                                <AlertCircle size={13} />
-                              )}
+                        <td className="ph-discount">
 
-                              {successful
-                                ? "Successful"
-                                : status}
-                            </span>
-                          </td>
+                          {formatMoney(
+                            payment.discountPaise
+                          )}
 
-                          <td>
+                        </td>
+
+                        <td className="ph-paid">
+
+                          {formatMoney(
+                            payment.paidPaise
+                          )}
+
+                        </td>
+
+                        <td>
+
+                          <PaymentStatus
+                            status={getPaymentStatus(payment)}
+                          />
+
+                        </td>
+
+                        <td>
+
+                          {available ? (
+
                             <div className="ph-actions">
 
                               <button
-                                type="button"
                                 title="View receipt"
-                                aria-label={
-                                  `View receipt ${payment.id}`
-                                }
-                                disabled={
-                                  !successful ||
-                                  detailsLoading !== null
-                                }
+                                aria-label="View receipt"
+                                disabled={viewingId !== null}
                                 onClick={() =>
-                                  handleViewReceipt(
-                                    payment.id
-                                  )
+                                  handleViewReceipt(payment.id)
                                 }
                               >
-                                {detailsLoading ===
-                                payment.id ? (
-                                  <LoaderCircle
-                                    size={17}
-                                    className="ph-spin"
-                                  />
-                                ) : (
-                                  <Eye size={17} />
-                                )}
+
+                                {viewingId === payment.id
+
+                                  ? <LoaderCircle
+                                      size={17}
+                                      className="ph-spin"
+                                    />
+
+                                  : <Eye size={17} />}
+
                               </button>
 
                               <button
-                                type="button"
-                                title="Download PDF receipt"
-                                aria-label={
-                                  `Download receipt ${payment.id}`
-                                }
-                                disabled={
-                                  !successful ||
-                                  downloading !== null
-                                }
+                                title="Download PDF"
+                                aria-label="Download PDF"
+                                disabled={downloadingId !== null}
                                 onClick={() =>
-                                  handleDownload(
-                                    payment.id
-                                  )
+                                  handleDownload(payment.id)
                                 }
                               >
-                                {downloading ===
-                                payment.id ? (
-                                  <LoaderCircle
-                                    size={17}
-                                    className="ph-spin"
-                                  />
-                                ) : (
-                                  <Download size={17} />
-                                )}
+
+                                {downloadingId === payment.id
+
+                                  ? <LoaderCircle
+                                      size={17}
+                                      className="ph-spin"
+                                    />
+
+                                  : <Download size={17} />}
+
                               </button>
 
                             </div>
-                          </td>
 
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          ) : "—"}
+
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+            <div className="ph-pagination">
+
+              <span>
+
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}
+
+                {" – "}
+
+                {Math.min(
+                  currentPage * PAGE_SIZE,
+                  filteredPayments.length
+                )}
+
+                {" of "}
+
+                {filteredPayments.length} transactions
+
+              </span>
+
+              <div>
+
+                <button
+                  onClick={() =>
+                    setPage(currentPage - 1)
+                  }
+                  disabled={currentPage === 1}
+                  aria-label="Previous page"
+                >
+
+                  <ChevronLeft size={17} />
+
+                </button>
+
+                <strong>
+                  {currentPage} / {totalPages}
+                </strong>
+
+                <button
+                  onClick={() =>
+                    setPage(currentPage + 1)
+                  }
+                  disabled={currentPage === totalPages}
+                  aria-label="Next page"
+                >
+
+                  <ChevronRight size={17} />
+
+                </button>
 
               </div>
 
-              {/* Pagination */}
+            </div>
 
-              <div className="ph-pagination">
-                <p>
-                  Showing{" "}
-                  {(currentPage - 1) * PAGE_SIZE + 1}
-                  {" "}–{" "}
-                  {Math.min(
-                    currentPage * PAGE_SIZE,
-                    filteredPayments.length
-                  )}
-                  {" "}of {filteredPayments.length}
-                  {" "}transactions
-                </p>
-
-                <div className="ph-pagination-controls">
-                  <button
-                    type="button"
-                    aria-label="Previous page"
-                    disabled={currentPage === 1}
-                    onClick={() =>
-                      setPage(currentPage - 1)
-                    }
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-
-                  <span>
-                    {currentPage} / {totalPages}
-                  </span>
-
-                  <button
-                    type="button"
-                    aria-label="Next page"
-                    disabled={
-                      currentPage === totalPages
-                    }
-                    onClick={() =>
-                      setPage(currentPage + 1)
-                    }
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+          </>
+        )}
 
       </section>
 
-      {/* Help Section */}
+      <footer className="ph-footer">
 
-      <section className="ph-help">
-        <div className="ph-help-icon">
-          <ShieldCheck size={25} />
-        </div>
+        <ShieldCheck size={19} />
 
-        <div className="ph-help-content">
-          <h3>Have a billing question?</h3>
+        <span>
+          Receipts are available for successful verified
+          membership payments and coupon redemptions.
+        </span>
 
-          <p>
-            Contact library support for assistance
-            with membership payments and receipts.
-          </p>
-        </div>
-
-        <Link
-          to="/member/support"
-          className="ph-outline-btn"
-        >
-          Contact support
-          <ArrowRight size={16} />
+        <Link to="/member/support">
+          Need help?
         </Link>
-      </section>
 
-      {/* Receipt Details Modal */}
+      </footer>
 
       {selectedReceipt && (
-        <div
-          className="ph-modal-overlay"
-          onClick={() => setSelectedReceipt(null)}
-        >
-          <section
-            className="ph-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ph-receipt-title"
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-          >
-            <button
-              type="button"
-              className="ph-modal-close"
-              aria-label="Close receipt"
-              autoFocus
-              onClick={() => setSelectedReceipt(null)}
-            >
-              <X size={22} />
-            </button>
 
-            <div className="ph-modal-icon">
-              <ReceiptText size={32} />
-            </div>
+        <ReceiptModal
 
-            <h2 id="ph-receipt-title">
-              Payment Receipt
-            </h2>
+          receipt={selectedReceipt}
 
-            <p className="ph-modal-subtitle">
-              Smart Library Membership
-            </p>
+          onClose={() => setSelectedReceipt(null)}
 
-            <div className="ph-receipt-details">
+          onDownload={handleDownload}
 
-              {[
-                [
-                  "Receipt number",
-                  selectedReceipt.receiptNumber,
-                ],
-                [
-                  "Transaction ID",
-                  selectedReceipt.transactionId,
-                ],
-                [
-                  "Member name",
-                  selectedReceipt.memberName,
-                ],
-                [
-                  "Membership plan",
-                  selectedReceipt.membershipPlan,
-                ],
-                [
-                  "Payment date",
-                  formatPaymentDate(
-                    selectedReceipt.paymentDate
-                  ),
-                ],
-                [
-                  "Valid until",
-                  formatPaymentDate(
-                    selectedReceipt.membershipEndDate
-                  ),
-                ],
-                [
-                  "Coupon code",
-                  selectedReceipt.couponCode,
-                ],
-                [
-                  "Original amount",
-                  formatMoney(
-                    selectedReceipt.originalPaise
-                  ),
-                ],
-                [
-                  "Discount",
-                  formatMoney(
-                    selectedReceipt.discountPaise
-                  ),
-                ],
-              ].map(([label, value]) => (
-                <div
-                  className="ph-receipt-row"
-                  key={label}
-                >
-                  <span>{label}</span>
-                  <strong>{value ?? "—"}</strong>
-                </div>
-              ))}
+          downloading={downloadingId !== null}
 
-            </div>
-
-            <div className="ph-receipt-total">
-              <span>Total paid</span>
-
-              <h2>
-                {formatMoney(
-                  selectedReceipt.paidPaise
-                )}
-              </h2>
-            </div>
-
-            {actionError && (
-              <div className="ph-error" role="alert">
-                <AlertCircle size={18} />
-                {actionError}
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="ph-primary-btn ph-modal-download"
-              disabled={downloading !== null}
-              onClick={() =>
-                handleDownload(
-                  selectedReceipt.paymentId
-                )
-              }
-            >
-              {downloading !== null ? (
-                <LoaderCircle
-                  size={19}
-                  className="ph-spin"
-                />
-              ) : (
-                <Download size={19} />
-              )}
-
-              Download PDF receipt
-            </button>
-
-          </section>
-        </div>
+        />
       )}
 
     </div>

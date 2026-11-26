@@ -3,15 +3,18 @@ import React, {
     useEffect,
     useMemo,
     useCallback,
+    useRef,
 } from "react";
 
 import {
+    Wallet,
     CreditCard,
-    IndianRupee,
-    Receipt,
+    CheckCircle2,
+    Clock,
     TicketPercent,
-    Search,
+    Undo2,
     RefreshCw,
+    Search,
     Download,
     Eye,
     X,
@@ -19,12 +22,11 @@ import {
     ChevronRight,
     LoaderCircle,
     AlertCircle,
-    Wallet,
     ShieldCheck,
-    CalendarDays,
-    UserRound,
-    Mail,
-    CheckCircle2,
+    Receipt,
+    IndianRupee,
+    ListOrdered,
+    ArrowUpRight,
 } from "lucide-react";
 
 import {
@@ -32,362 +34,150 @@ import {
     formatPaymentMoney,
     formatPaymentDate,
     getTransactionId,
+    getPaymentStatus,
+    getPaymentMethod,
+    canRefund,
+    canDownloadReceipt,
 } from "../../services/adminPaymentApi";
 
 import "../../styles/admin/AdminPayments.css";
 
 const PAGE_SIZE = 10;
 
+const TABS = [
+    {
+        id: "payments",
+        label: "Transactions",
+        icon: CreditCard,
+    },
+    {
+        id: "orders",
+        label: "Payment Orders",
+        icon: ListOrdered,
+    },
+    {
+        id: "refunds",
+        label: "Refund History",
+        icon: Undo2,
+    },
+];
+
+const STATUS_OPTIONS = {
+    payments: [
+        "SUCCESS",
+        "REFUND_PENDING",
+        "REFUNDED",
+        "UNVERIFIED",
+        "FAILED",
+    ],
+
+    orders: [
+        "CREATED",
+        "PENDING",
+        "CAPTURED",
+        "SUCCESS",
+        "FAILED",
+        "EXPIRED",
+        "REFUND_PENDING",
+        "REFUNDED",
+    ],
+
+    refunds: [
+        "REQUESTED",
+        "PROCESSING",
+        "PROCESSED",
+        "FAILED",
+        "RECONCILIATION_REQUIRED",
+    ],
+};
+
+const money = formatPaymentMoney;
+const date = formatPaymentDate;
 
 // ==========================================
-// PAYMENT STATUS
+// STATUS BADGE
 // ==========================================
 
-function PaymentStatus({ payment }) {
+function StatusBadge({ status }) {
 
-    const status =
-        payment.paymentStatus ||
-        payment.status ||
-        "UNVERIFIED";
+    const value = String(
+        status || "UNVERIFIED"
+    ).toUpperCase();
+
+    let tone = "neutral";
+
+    if (["SUCCESS", "PROCESSED"].includes(value)) {
+        tone = "success";
+    } else if (
+        [
+            "PENDING",
+            "CREATED",
+            "CAPTURED",
+            "REQUESTED",
+            "PROCESSING",
+            "REFUND_PENDING",
+        ].includes(value)
+    ) {
+        tone = "warning";
+    } else if (
+        [
+            "FAILED",
+            "EXPIRED",
+            "RECONCILIATION_REQUIRED",
+        ].includes(value)
+    ) {
+        tone = "danger";
+    } else if (value === "REFUNDED") {
+        tone = "purple";
+    }
 
     return (
+        <span className={`ap-status ap-status-${tone}`}>
+            <span className="ap-status-dot" />
 
-        <span className={
-            `ap-status ${
-                status === "SUCCESS"
-                    ? "ap-success"
-                    : "ap-unverified"
-            }`
-        }>
-
-            <span />
-
-            {status === "SUCCESS"
-                ? "Successful"
-                : status}
-
+            {value.replace(/_/g, " ")}
         </span>
-
     );
-
 }
 
-
 // ==========================================
-// RECEIPT DETAILS MODAL
+// STAT CARD
 // ==========================================
 
-function ReceiptModal({
-    payment,
-    onClose,
-    onDownload,
-    downloading,
+function StatCard({
+    label,
+    value,
+    icon: Icon,
+    tone,
+    description,
 }) {
 
-    const [details, setDetails] = useState(null);
-
-    const [loading, setLoading] = useState(true);
-
-    const [error, setError] = useState("");
-
-    useEffect(() => {
-
-        let active = true;
-
-        adminPaymentApi.getReceiptDetails(payment.id)
-
-            .then(data => {
-
-                if (active) setDetails(data);
-
-            })
-
-            .catch(err => {
-
-                if (active) {
-                    setError(err.message);
-                }
-
-            })
-
-            .finally(() => {
-
-                if (active) setLoading(false);
-
-            });
-
-        return () => {
-            active = false;
-        };
-
-    }, [payment.id]);
-
-    const data = details || payment;
-
     return (
+        <div className="ap-stat-card">
 
-        <div className="ap-overlay">
+            <div className="ap-stat-top">
+                <span>{label}</span>
 
-            <section
-                className="ap-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="ap-receipt-title"
-            >
-
-                <header className="ap-modal-header">
-
-                    <div className="ap-icon ap-purple">
-
-                        <Receipt size={25} />
-
-                    </div>
-
-                    <div className="ap-modal-heading">
-
-                        <h2 id="ap-receipt-title">
-                            Payment details
-                        </h2>
-
-                        <p>
-                            Membership transaction receipt
-                        </p>
-
-                    </div>
-
-                    <button
-                        className="ap-icon-button"
-                        onClick={onClose}
-                        aria-label="Close"
-                    >
-
-                        <X size={21} />
-
-                    </button>
-
-                </header>
-
-                <div className="ap-modal-body">
-
-                    {loading ? (
-
-                        <div className="ap-empty">
-
-                            <LoaderCircle
-                                size={35}
-                                className="ap-spin"
-                            />
-
-                            <p>Loading receipt...</p>
-
-                        </div>
-
-                    ) : (
-
-                        <>
-
-                            {error && (
-
-                                <div className="ap-error">
-
-                                    <AlertCircle size={18} />
-
-                                    {error}
-
-                                </div>
-
-                            )}
-
-                            <div className="ap-receipt-hero">
-
-                                <Receipt size={32} />
-
-                                <span>AMOUNT PAID</span>
-
-                                <h2>
-
-                                    {formatPaymentMoney(
-                                        data.paidPaise
-                                    )}
-
-                                </h2>
-
-                                <PaymentStatus payment={data} />
-
-                            </div>
-
-                            <div className="ap-detail-grid">
-
-                                <DetailItem
-                                    label="Transaction ID"
-                                    value={
-                                        getTransactionId(data)
-                                    }
-                                />
-
-                                <DetailItem
-                                    label="Receipt number"
-                                    value={data.receiptNumber}
-                                />
-
-                                <DetailItem
-                                    label="Member name"
-                                    value={data.memberName}
-                                />
-
-                                <DetailItem
-                                    label="Email address"
-                                    value={data.email}
-                                />
-
-                                <DetailItem
-                                    label="Membership plan"
-                                    value={data.membershipPlan}
-                                />
-
-                                <DetailItem
-                                    label="Coupon code"
-                                    value={data.couponCode}
-                                />
-
-                                <DetailItem
-                                    label="Payment method"
-                                    value={
-                                        data.paymentMethod ||
-                                        "DEMO_COUPON"
-                                    }
-                                />
-
-                                <DetailItem
-                                    label="Payment date"
-                                    value={formatPaymentDate(
-                                        data.paymentDate ||
-                                        data.createdAt
-                                    )}
-                                />
-
-                                <DetailItem
-                                    label="Membership start"
-                                    value={formatPaymentDate(
-                                        data.membershipStartDate
-                                    )}
-                                />
-
-                                <DetailItem
-                                    label="Membership expiry"
-                                    value={formatPaymentDate(
-                                        data.membershipEndDate
-                                    )}
-                                />
-
-                            </div>
-
-                            <div className="ap-price-summary">
-
-                                <div>
-
-                                    <span>Original price</span>
-
-                                    <strong>
-
-                                        {formatPaymentMoney(
-                                            data.originalPaise
-                                        )}
-
-                                    </strong>
-
-                                </div>
-
-                                <div>
-
-                                    <span>Coupon discount</span>
-
-                                    <strong className="ap-green-text">
-
-                                        -{formatPaymentMoney(
-                                            data.discountPaise
-                                        )}
-
-                                    </strong>
-
-                                </div>
-
-                                <div className="ap-price-total">
-
-                                    <span>Total paid</span>
-
-                                    <strong>
-
-                                        {formatPaymentMoney(
-                                            data.paidPaise
-                                        )}
-
-                                    </strong>
-
-                                </div>
-
-                            </div>
-
-                        </>
-
-                    )}
-
+                <div className={`ap-stat-icon ap-icon-${tone}`}>
+                    <Icon size={21} />
                 </div>
+            </div>
 
-                <footer className="ap-modal-footer">
+            <h3>{value}</h3>
 
-                    <button
-                        className="ap-secondary"
-                        onClick={onClose}
-                    >
-
-                        Close
-
-                    </button>
-
-                    <button
-                        className="ap-primary"
-                        disabled={
-                            loading ||
-                            downloading === payment.id
-                        }
-                        onClick={() =>
-                            onDownload(payment.id)
-                        }
-                    >
-
-                        {downloading === payment.id ? (
-
-                            <LoaderCircle
-                                size={18}
-                                className="ap-spin"
-                            />
-
-                        ) : (
-
-                            <Download size={18} />
-
-                        )}
-
-                        Download PDF
-
-                    </button>
-
-                </footer>
-
-            </section>
+            <p>{description}</p>
 
         </div>
-
     );
-
 }
 
+// ==========================================
+// DETAIL ITEM
+// ==========================================
 
 function DetailItem({ label, value }) {
 
     return (
-
         <div className="ap-detail-item">
 
             <span>{label}</span>
@@ -395,317 +185,833 @@ function DetailItem({ label, value }) {
             <strong>{value ?? "—"}</strong>
 
         </div>
-
     );
-
 }
 
+// ==========================================
+// MODAL
+// ==========================================
+
+function Modal({
+    title,
+    subtitle,
+    onClose,
+    busy,
+    children,
+}) {
+
+    const panelRef = useRef(null);
+
+    useEffect(() => {
+
+        const previousFocus = document.activeElement;
+
+        panelRef.current?.focus();
+
+        function handleKey(event) {
+
+            if (event.key === "Escape" && !busy) {
+                onClose();
+            }
+
+            if (event.key !== "Tab") return;
+
+            const elements = Array.from(
+                panelRef.current?.querySelectorAll(
+                    'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]'
+                ) || []
+            );
+
+            if (!elements.length) {
+                event.preventDefault();
+                return;
+            }
+
+            const first = elements[0];
+            const last = elements[elements.length - 1];
+
+            if (
+                event.shiftKey &&
+                (
+                    document.activeElement === first ||
+                    document.activeElement === panelRef.current
+                )
+            ) {
+                event.preventDefault();
+                last.focus();
+            } else if (
+                !event.shiftKey &&
+                document.activeElement === last
+            ) {
+                event.preventDefault();
+                first.focus();
+            }
+        }
+
+        document.addEventListener("keydown", handleKey);
+
+        return () => {
+
+            document.removeEventListener(
+                "keydown",
+                handleKey
+            );
+
+            previousFocus?.focus?.();
+        };
+
+    }, [busy, onClose]);
+
+    return (
+        <div
+            className="ap-modal-overlay"
+            onMouseDown={(event) => {
+                if (
+                    event.target === event.currentTarget &&
+                    !busy
+                ) {
+                    onClose();
+                }
+            }}
+        >
+
+            <section
+                className="ap-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
+                tabIndex={-1}
+                ref={panelRef}
+            >
+
+                <header className="ap-modal-header">
+
+                    <div>
+                        <h2>{title}</h2>
+                        <p>{subtitle}</p>
+                    </div>
+
+                    <button
+                        className="ap-icon-button"
+                        onClick={onClose}
+                        disabled={busy}
+                        aria-label="Close dialog"
+                    >
+                        <X size={21} />
+                    </button>
+
+                </header>
+
+                <div className="ap-modal-body">
+                    {children}
+                </div>
+
+            </section>
+
+        </div>
+    );
+}
 
 // ==========================================
-// MAIN PAYMENT PAGE
+// PAGINATION
+// ==========================================
+
+function Pagination({
+    page,
+    totalPages,
+    total,
+    onChange,
+    disabled,
+}) {
+
+    return (
+        <div className="ap-pagination">
+
+            <span>
+                {total === 0
+                    ? "No records"
+                    : `Showing ${page * PAGE_SIZE + 1}–${Math.min(
+                        (page + 1) * PAGE_SIZE,
+                        total
+                    )} of ${total}`}
+            </span>
+
+            <div className="ap-pagination-actions">
+
+                <button
+                    className="ap-icon-button"
+                    disabled={disabled || page === 0}
+                    onClick={() => onChange(page - 1)}
+                    aria-label="Previous page"
+                >
+                    <ChevronLeft size={18} />
+                </button>
+
+                <span className="ap-page-number">
+                    {page + 1} / {Math.max(1, totalPages)}
+                </span>
+
+                <button
+                    className="ap-icon-button"
+                    disabled={
+                        disabled ||
+                        page + 1 >= totalPages
+                    }
+                    onClick={() => onChange(page + 1)}
+                    aria-label="Next page"
+                >
+                    <ChevronRight size={18} />
+                </button>
+
+            </div>
+
+        </div>
+    );
+}
+
+// ==========================================
+// MAIN ADMIN PAYMENTS PAGE
 // ==========================================
 
 export default function AdminPayments() {
 
+    const [tab, setTab] = useState("payments");
+
+    const [summary, setSummary] = useState(null);
+
     const [payments, setPayments] = useState([]);
 
-    const [loading, setLoading] = useState(true);
-
-    const [error, setError] = useState("");
-
-    const [message, setMessage] = useState("");
+    const [serverPage, setServerPage] = useState({
+        content: [],
+        totalPages: 0,
+        totalElements: 0,
+    });
 
     const [search, setSearch] = useState("");
 
-    const [filter, setFilter] = useState("ALL");
+    const [status, setStatus] = useState("");
 
     const [page, setPage] = useState(0);
 
-    const [selected, setSelected] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const [downloading, setDownloading] = useState(null);
+    const [summaryLoading, setSummaryLoading] =
+        useState(true);
 
+    const [error, setError] = useState("");
 
-    // ======================================
-    // LOAD DATA
-    // ======================================
+    const [summaryError, setSummaryError] =
+        useState("");
 
-    const loadPayments = useCallback(async () => {
+    const [notice, setNotice] = useState("");
+
+    const [busy, setBusy] = useState(false);
+
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const [modal, setModal] = useState(null);
+
+    const [modalError, setModalError] = useState("");
+
+    const [refundReason, setRefundReason] = useState("");
+
+    const [confirmed, setConfirmed] = useState(false);
+
+    const actionLock = useRef(false);
+
+    // ==========================================
+    // LOAD SUMMARY
+    // ==========================================
+
+    useEffect(() => {
+
+        let active = true;
+
+        async function loadSummary() {
+
+            setSummaryLoading(true);
+            setSummaryError("");
+
+            try {
+
+                const data =
+                    await adminPaymentApi.getSummary();
+
+                if (active) {
+                    setSummary(data);
+                }
+
+            } catch (err) {
+
+                if (active) {
+                    setSummaryError(err.message);
+                    setSummary(null);
+                }
+
+            } finally {
+
+                if (active) {
+                    setSummaryLoading(false);
+                }
+            }
+        }
+
+        loadSummary();
+
+        return () => {
+            active = false;
+        };
+
+    }, [refreshKey]);
+
+    // ==========================================
+    // LOAD TRANSACTIONS
+    // ==========================================
+
+    useEffect(() => {
+
+        let active = true;
+
+        async function loadPayments() {
+
+            try {
+
+                const data =
+                    await adminPaymentApi.getPayments();
+
+                if (!Array.isArray(data)) {
+                    throw new Error(
+                        "Invalid payment history response."
+                    );
+                }
+
+                if (active) {
+                    setPayments(data);
+                }
+
+            } catch (err) {
+
+                if (active) {
+                    setPayments([]);
+                    setError(err.message);
+                }
+            }
+        }
+
+        if (tab !== "payments") return;
 
         setLoading(true);
         setError("");
 
-        try {
-
-            const data =
-                await adminPaymentApi.getPayments();
-
-            const items = Array.isArray(data)
-                ? data
-                : data?.content;
-
-            if (!Array.isArray(items)) {
-
-                throw new Error(
-                    "Unexpected payment response."
-                );
-
+        loadPayments().finally(() => {
+            if (active) {
+                setLoading(false);
             }
+        });
 
-            setPayments(items);
+        return () => {
+            active = false;
+        };
 
-        } catch (err) {
+    }, [tab, refreshKey]);
 
-            setError(
-                err.message ||
-                "Unable to load payment history."
-            );
-
-            setPayments([]);
-
-        } finally {
-
-            setLoading(false);
-
-        }
-
-    }, []);
+    // ==========================================
+    // LOAD ORDERS / REFUNDS
+    // ==========================================
 
     useEffect(() => {
 
-        loadPayments();
+        if (tab === "payments") return;
 
-    }, [loadPayments]);
+        let active = true;
 
+        async function loadPage() {
 
-    // ======================================
-    // DOWNLOAD PDF
-    // ======================================
+            setLoading(true);
+            setError("");
 
-    async function downloadReceipt(id) {
+            try {
 
-        if (downloading !== null) return;
+                const data =
+                    tab === "orders"
 
-        setDownloading(id);
-        setMessage("");
+                        ? await adminPaymentApi.getOrders(
+                            page,
+                            PAGE_SIZE,
+                            status
+                        )
 
-        try {
+                        : await adminPaymentApi.getRefunds(
+                            page,
+                            PAGE_SIZE,
+                            status
+                        );
 
-            await adminPaymentApi.downloadReceipt(id);
-
-            setMessage("Receipt download started.");
-
-        } catch (err) {
-
-            setMessage(
-                err.message ||
-                "Unable to download receipt."
-            );
-
-        } finally {
-
-            setDownloading(null);
-
-        }
-
-    }
-
-
-    // ======================================
-    // STATISTICS
-    // ======================================
-
-    const stats = useMemo(() => {
-
-        return payments.reduce(
-
-            (result, payment) => {
-
-                result.original += Number(
-                    payment.originalPaise || 0
-                );
-
-                result.discount += Number(
-                    payment.discountPaise || 0
-                );
-
-                result.paid += Number(
-                    payment.paidPaise || 0
-                );
-
-                if (
-                    Number(payment.paidPaise) === 0 &&
-                    Number(payment.discountPaise) > 0
-                ) {
-
-                    result.free += 1;
-
+                if (!Array.isArray(data?.content)) {
+                    throw new Error(
+                        "Invalid paginated response."
+                    );
                 }
 
-                return result;
+                if (active) {
 
-            },
+                    setServerPage(data);
 
-            {
-                original: 0,
-                discount: 0,
-                paid: 0,
-                free: 0,
+                    if (
+                        page > 0 &&
+                        page >= data.totalPages
+                    ) {
+                        setPage(
+                            Math.max(0, data.totalPages - 1)
+                        );
+                    }
+                }
+
+            } catch (err) {
+
+                if (active) {
+
+                    setServerPage({
+                        content: [],
+                        totalPages: 0,
+                        totalElements: 0,
+                    });
+
+                    setError(err.message);
+                }
+
+            } finally {
+
+                if (active) {
+                    setLoading(false);
+                }
             }
+        }
 
-        );
+        loadPage();
 
-    }, [payments]);
+        return () => {
+            active = false;
+        };
 
-    const statCards = [
+    }, [tab, page, status, refreshKey]);
 
-        {
-            label: "Total transactions",
-            value: payments.length,
-            icon: Receipt,
-            color: "purple",
-        },
-
-        {
-            label: "Recorded amount paid",
-            value: formatPaymentMoney(stats.paid),
-            icon: IndianRupee,
-            color: "green",
-        },
-
-        {
-            label: "Total discounts",
-            value: formatPaymentMoney(stats.discount),
-            icon: TicketPercent,
-            color: "orange",
-        },
-
-        {
-            label: "Free redemptions",
-            value: stats.free,
-            icon: Wallet,
-            color: "blue",
-        },
-
-    ];
-
-
-    // ======================================
-    // SEARCH AND FILTER
-    // ======================================
+    // ==========================================
+    // FILTER PAYMENTS
+    // ==========================================
 
     const filteredPayments = useMemo(() => {
 
         const query = search.trim().toLowerCase();
 
-        return payments.filter(payment => {
+        return payments.filter((payment) => {
+
+            const matchesStatus =
+                !status ||
+                getPaymentStatus(payment) === status;
 
             const searchable = [
-
                 payment.id,
-
                 payment.userId,
-
-                payment.memberName,
-
-                payment.email,
-
                 payment.couponCode,
-
+                payment.razorpayPaymentId,
+                payment.razorpayOrderId,
                 getTransactionId(payment),
-
-            ].filter(value => value != null)
+                getPaymentMethod(payment),
+            ]
+                .filter((value) => value != null)
                 .join(" ")
                 .toLowerCase();
 
-            const matchesSearch =
-                searchable.includes(query);
-
-            const isFree =
-                Number(payment.paidPaise) === 0 &&
-                Number(payment.discountPaise) > 0;
-
-            const matchesFilter =
-
-                filter === "ALL" ||
-
-                (filter === "FREE" && isFree) ||
-
-                (
-                    filter === "PAID" &&
-                    Number(payment.paidPaise) > 0
-                );
-
-            return matchesSearch && matchesFilter;
-
+            return (
+                matchesStatus &&
+                (!query || searchable.includes(query))
+            );
         });
 
-    }, [payments, search, filter]);
+    }, [payments, search, status]);
 
-    const totalPages = Math.ceil(
-        filteredPayments.length / PAGE_SIZE
-    );
+    const totalPages = tab === "payments"
 
-    const currentPage = Math.min(
-        page,
-        Math.max(0, totalPages - 1)
-    );
+        ? Math.ceil(
+            filteredPayments.length / PAGE_SIZE
+        )
 
-    const visiblePayments = filteredPayments.slice(
+        : serverPage.totalPages;
 
-        currentPage * PAGE_SIZE,
+    const total = tab === "payments"
 
-        (currentPage + 1) * PAGE_SIZE
+        ? filteredPayments.length
 
-    );
+        : serverPage.totalElements;
 
+    const rows = tab === "payments"
 
-    // ======================================
-    // PAGE UI
-    // ======================================
+        ? filteredPayments.slice(
+            page * PAGE_SIZE,
+            (page + 1) * PAGE_SIZE
+        )
+
+        : serverPage.content;
+
+    useEffect(() => {
+
+        if (
+            tab === "payments" &&
+            page > 0 &&
+            page >= totalPages
+        ) {
+            setPage(Math.max(0, totalPages - 1));
+        }
+
+    }, [tab, page, totalPages]);
+
+    // ==========================================
+    // UI ACTIONS
+    // ==========================================
+
+    function refresh() {
+
+        setLoading(true);
+
+        setRefreshKey((value) => value + 1);
+    }
+
+    function changeTab(value) {
+
+        if (value === tab || busy) return;
+
+        setLoading(true);
+        setTab(value);
+        setPage(0);
+        setStatus("");
+        setSearch("");
+        setError("");
+        setNotice("");
+    }
+
+    const closeModal = useCallback(() => {
+
+        if (actionLock.current) return;
+
+        setModal(null);
+        setModalError("");
+        setRefundReason("");
+        setConfirmed(false);
+
+    }, []);
+
+    function beginAction() {
+
+        if (actionLock.current) {
+            return false;
+        }
+
+        actionLock.current = true;
+        setBusy(true);
+        setError("");
+        setModalError("");
+        setNotice("");
+
+        return true;
+    }
+
+    function endAction() {
+
+        actionLock.current = false;
+        setBusy(false);
+    }
+
+    // ==========================================
+    // RECEIPT PREVIEW
+    // ==========================================
+
+    async function openReceipt(payment) {
+
+        if (!canDownloadReceipt(payment)) return;
+
+        if (!beginAction()) return;
+
+        try {
+
+            const data =
+                await adminPaymentApi.getReceiptDetails(
+                    payment.id
+                );
+
+            setModal({
+                type: "receipt",
+                data,
+            });
+
+        } catch (err) {
+
+            setError(err.message);
+
+        } finally {
+
+            endAction();
+        }
+    }
+
+    async function downloadReceipt(id) {
+
+        if (!beginAction()) return;
+
+        try {
+
+            await adminPaymentApi.downloadReceipt(id);
+
+            setNotice("Receipt downloaded.");
+
+        } catch (err) {
+
+            setError(err.message);
+            setModalError(err.message);
+
+        } finally {
+
+            endAction();
+        }
+    }
+
+    // ==========================================
+    // REFUND REQUEST
+    // ==========================================
+
+    function openRefund(payment) {
+
+        if (!canRefund(payment) || busy) return;
+
+        setRefundReason("");
+        setConfirmed(false);
+        setModalError("");
+
+        setModal({
+            type: "refund-request",
+            data: payment,
+        });
+    }
+
+    async function submitRefund(event) {
+
+        event.preventDefault();
+
+        if (
+            modal?.type !== "refund-request" ||
+            !confirmed ||
+            refundReason.trim().length < 5 ||
+            refundReason.trim().length > 500
+        ) {
+            return;
+        }
+
+        if (!beginAction()) return;
+
+        try {
+
+            const result =
+                await adminPaymentApi.requestRefund(
+                    modal.data.id,
+                    refundReason
+                );
+
+            setModal({
+                type: "refund-details",
+                data: result,
+            });
+
+            setConfirmed(false);
+            setRefundReason("");
+
+            if (result.status === "PROCESSED") {
+
+                setNotice(
+                    "Refund confirmed by Razorpay."
+                );
+
+            } else {
+
+                setNotice(
+                    `Refund status: ${result.status.replace(
+                        /_/g,
+                        " "
+                    )}. Check refund history for updates.`
+                );
+            }
+
+        } catch (err) {
+
+            setModalError(
+                `${err.message} Check refund history before taking further action.`
+            );
+
+            setConfirmed(false);
+
+        } finally {
+
+            refresh();
+            endAction();
+        }
+    }
+
+    // ==========================================
+    // RECONCILE PAYMENT ORDER
+    // ==========================================
+
+    async function reconcileOrder(order) {
+
+        if (!beginAction()) return;
+
+        try {
+
+            const result =
+                await adminPaymentApi.reconcileOrder(
+                    order.id
+                );
+
+            setNotice(
+                result.message ||
+                `Order status: ${result.status}`
+            );
+
+        } catch (err) {
+
+            setError(err.message);
+
+        } finally {
+
+            refresh();
+            endAction();
+        }
+    }
+
+    // ==========================================
+    // RECONCILE REFUND
+    // ==========================================
+
+    async function reconcileRefund(refund) {
+
+        if (!beginAction()) return;
+
+        try {
+
+            const result =
+                await adminPaymentApi.reconcileRefund(
+                    refund.id
+                );
+
+            setModal({
+                type: "refund-details",
+                data: result,
+            });
+
+            setNotice(
+                `Refund status: ${result.status.replace(
+                    /_/g,
+                    " "
+                )}`
+            );
+
+        } catch (err) {
+
+            setError(err.message);
+            setModalError(err.message);
+
+        } finally {
+
+            refresh();
+            endAction();
+        }
+    }
+
+    async function openRefundByPayment(payment) {
+
+        if (!beginAction()) return;
+
+        try {
+
+            const result =
+                await adminPaymentApi.getRefundByPayment(
+                    payment.id
+                );
+
+            setModal({
+                type: "refund-details",
+                data: result,
+            });
+
+        } catch (err) {
+
+            setError(err.message);
+
+        } finally {
+
+            endAction();
+        }
+    }
+
+    // ==========================================
+    // STATISTICS
+    // ==========================================
+
+    const stats = [
+
+        {
+            label: "Net Revenue",
+            value: money(summary?.netRevenuePaise),
+            icon: Wallet,
+            tone: "purple",
+            description: "After recorded refunds",
+        },
+
+        {
+            label: "Successful Payments",
+            value: summary?.successfulPayments,
+            icon: CheckCircle2,
+            tone: "green",
+            description: "Successful transactions",
+        },
+
+        {
+            label: "Pending Orders",
+            value: summary?.pendingOrders,
+            icon: Clock,
+            tone: "orange",
+            description: "Awaiting payment completion",
+        },
+
+        {
+            label: "Total Refunded",
+            value: money(summary?.totalRefundedPaise),
+            icon: Undo2,
+            tone: "red",
+            description: "Gateway confirmed refunds",
+        },
+
+        {
+            label: "Coupon Redemptions",
+            value: summary?.couponRedemptions,
+            icon: TicketPercent,
+            tone: "purple",
+            description: "Free membership activations",
+        },
+
+        {
+            label: "Total Discounts",
+            value: money(summary?.totalDiscountPaise),
+            icon: IndianRupee,
+            tone: "orange",
+            description: "Coupon savings recorded",
+        },
+    ];
+
+    // ==========================================
+    // RENDER
+    // ==========================================
 
     return (
-
         <main className="ap-page">
-
-            <header className="ap-page-header">
-
-                <div>
-
-                    <span className="ap-eyebrow">
-
-                        LIBRARY ADMINISTRATION
-
-                    </span>
-
-                    <h1>Payments & Receipts</h1>
-
-                    <p>
-
-                        Monitor membership transactions
-                        and manage payment receipts.
-
-                    </p>
-
-                </div>
-
-                <button
-                    className="ap-secondary"
-                    onClick={loadPayments}
-                    disabled={loading}
-                >
-
-                    <RefreshCw
-                        size={18}
-                        className={loading ? "ap-spin" : ""}
-                    />
-
-                    Refresh
-
-                </button>
-
-            </header>
-
 
             {/* HERO */}
 
@@ -713,575 +1019,1215 @@ export default function AdminPayments() {
 
                 <div className="ap-hero-content">
 
-                    <span className="ap-hero-tag">
-
-                        <ShieldCheck size={15} />
-
-                        FINANCIAL MANAGEMENT
-
-                    </span>
-
-                    <h2>Manage membership payments.</h2>
-
-                    <p>
-
-                        Track transactions, coupon redemptions
-                        and downloadable membership receipts
-                        from one place.
-
-                    </p>
-
-                    <div className="ap-hero-total">
-
-                        <span>RECORDED AMOUNT PAID</span>
-
-                        <strong>
-
-                            {loading || error
-                                ? "—"
-                                : formatPaymentMoney(stats.paid)}
-
-                        </strong>
-
+                    <div className="ap-eyebrow">
+                        <ShieldCheck size={16} />
+                        FINANCE & TRANSACTIONS
                     </div>
 
-                </div>
-
-                <div className="ap-hero-art">
-
-                    <CreditCard
-                        size={145}
-                        strokeWidth={1}
-                    />
-
-                    <div className="ap-floating-receipt">
-
-                        <Receipt size={40} />
-
-                        <span>RECEIPT</span>
-
-                        <i />
-
-                        <i />
-
-                        <i />
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            {/* STATS */}
-
-            <section className="ap-stats">
-
-                {statCards.map(item => {
-
-                    const Icon = item.icon;
-
-                    return (
-
-                        <article
-                            className="ap-stat"
-                            key={item.label}
-                        >
-
-                            <div className={
-                                `ap-icon ap-${item.color}`
-                            }>
-
-                                <Icon size={24} />
-
-                            </div>
-
-                            <span>{item.label}</span>
-
-                            <strong>
-
-                                {loading || error
-                                    ? "—"
-                                    : item.value}
-
-                            </strong>
-
-                        </article>
-
-                    );
-
-                })}
-
-            </section>
-
-
-            {/* DEMO MODE */}
-
-            <section className="ap-demo-banner">
-
-                <div className="ap-icon ap-orange">
-
-                    <ShieldCheck size={25} />
-
-                </div>
-
-                <div>
-
-                    <strong>Demo payment environment</strong>
+                    <h1>Payment Management</h1>
 
                     <p>
-
-                        Membership activation currently uses
-                        100% discount coupons. Free redemptions
-                        are not actual cash revenue.
-
+                        Manage membership payments, coupon
+                        redemptions, orders and refunds.
                     </p>
-
-                </div>
-
-            </section>
-
-
-            {/* MESSAGE */}
-
-            {message && (
-
-                <div className="ap-message" role="status">
-
-                    <AlertCircle size={19} />
-
-                    <span>{message}</span>
 
                     <button
-                        onClick={() => setMessage("")}
-                        aria-label="Dismiss message"
+                        className="ap-hero-button"
+                        onClick={refresh}
+                        disabled={loading || busy}
                     >
-
-                        <X size={18} />
-
+                        <RefreshCw
+                            size={17}
+                            className={
+                                loading ? "ap-spin" : ""
+                            }
+                        />
+                        Refresh Data
                     </button>
 
                 </div>
 
+                <div className="ap-hero-art">
+                    <div className="ap-hero-orbit">
+                        <CreditCard size={65} />
+                    </div>
+                </div>
+
+            </section>
+
+            {/* STATS */}
+
+            <section className="ap-stats-grid">
+
+                {stats.map((stat) => (
+                    <StatCard
+                        key={stat.label}
+                        {...stat}
+                        value={
+                            summaryLoading
+                                ? "..."
+                                : stat.value ?? "—"
+                        }
+                    />
+                ))}
+
+            </section>
+
+            {/* SUMMARY ERROR */}
+
+            {summaryError && (
+                <div className="ap-alert ap-alert-error" role="alert">
+                    <AlertCircle size={19} />
+                    <span>
+                        Statistics unavailable: {summaryError}
+                    </span>
+                </div>
             )}
 
+            {/* FINANCE OVERVIEW */}
 
-            {/* TRANSACTION TABLE */}
+            <section className="ap-overview">
+
+                <DetailItem
+                    label="Gross revenue"
+                    value={money(summary?.grossRevenuePaise)}
+                />
+
+                <DetailItem
+                    label="Online payments"
+                    value={summary?.onlinePayments}
+                />
+
+                <DetailItem
+                    label="Refunds awaiting resolution"
+                    value={summary?.refundPending}
+                />
+
+                <DetailItem
+                    label="Completed refunds"
+                    value={summary?.refundedPayments}
+                />
+
+            </section>
+
+            {/* ALERTS */}
+
+            {error && (
+                <div
+                    className="ap-alert ap-alert-error"
+                    role="alert"
+                >
+                    <AlertCircle size={19} />
+
+                    <span>{error}</span>
+
+                    <button
+                        className="ap-alert-close"
+                        onClick={() => setError("")}
+                        aria-label="Dismiss error"
+                    >
+                        <X size={17} />
+                    </button>
+                </div>
+            )}
+
+            {notice && (
+                <div
+                    className="ap-alert ap-alert-info"
+                    role="status"
+                >
+                    <AlertCircle size={19} />
+
+                    <span>{notice}</span>
+
+                    <button
+                        className="ap-alert-close"
+                        onClick={() => setNotice("")}
+                        aria-label="Dismiss notification"
+                    >
+                        <X size={17} />
+                    </button>
+                </div>
+            )}
+
+            {/* MAIN PANEL */}
 
             <section className="ap-panel">
 
-                <header className="ap-panel-header">
+                <div className="ap-panel-heading">
 
                     <div>
-
-                        <h3>Transaction history</h3>
-
+                        <h2>Payment Activity</h2>
                         <p>
-
-                            View membership payment records
-                            and receipts.
-
+                            View transactions and manage
+                            payment operations.
                         </p>
-
                     </div>
 
-                    <span className="ap-count">
-
-                        {payments.length} transactions
-
+                    <span className="ap-record-count">
+                        {total} Records
                     </span>
 
-                </header>
+                </div>
 
+                {/* TABS */}
 
-                {/* SEARCH & FILTER */}
+                <div className="ap-tabs">
+
+                    {TABS.map(({ id, label, icon: Icon }) => (
+                        <button
+                            key={id}
+                            className={`ap-tab ${
+                                tab === id
+                                    ? "ap-tab-active"
+                                    : ""
+                            }`}
+                            onClick={() => changeTab(id)}
+                            disabled={busy}
+                            aria-pressed={tab === id}
+                        >
+                            <Icon size={18} />
+                            {label}
+                        </button>
+                    ))}
+
+                </div>
+
+                {/* FILTERS */}
 
                 <div className="ap-toolbar">
 
-                    <div className="ap-search">
+                    {tab === "payments" ? (
 
-                        <Search size={19} />
+                        <div className="ap-search">
 
-                        <input
-                            value={search}
-                            placeholder="Search transaction, member ID, coupon..."
-                            aria-label="Search payments"
-                            onChange={event => {
+                            <Search size={19} />
 
-                                setSearch(event.target.value);
-                                setPage(0);
+                            <input
+                                value={search}
+                                onChange={(event) => {
+                                    setSearch(event.target.value);
+                                    setPage(0);
+                                }}
+                                placeholder="Search transaction, member ID, coupon..."
+                                aria-label="Search payments"
+                            />
 
-                            }}
-                        />
+                            {search && (
+                                <button
+                                    onClick={() => {
+                                        setSearch("");
+                                        setPage(0);
+                                    }}
+                                    aria-label="Clear search"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
 
-                    </div>
+                        </div>
+
+                    ) : (
+
+                        <p className="ap-filter-hint">
+                            {tab === "orders"
+                                ? "Verify and recover captured payment orders."
+                                : "Track and reconcile existing refund requests."}
+                        </p>
+
+                    )}
 
                     <select
-                        value={filter}
-                        aria-label="Filter payments"
-                        onChange={event => {
-
-                            setFilter(event.target.value);
+                        className="ap-select"
+                        value={status}
+                        disabled={busy}
+                        aria-label="Filter by status"
+                        onChange={(event) => {
+                            setStatus(event.target.value);
                             setPage(0);
-
                         }}
                     >
 
-                        <option value="ALL">
-
-                            All transactions
-
+                        <option value="">
+                            All Statuses
                         </option>
 
-                        <option value="FREE">
-
-                            Free redemptions
-
-                        </option>
-
-                        <option value="PAID">
-
-                            Paid transactions
-
-                        </option>
+                        {STATUS_OPTIONS[tab].map((value) => (
+                            <option key={value} value={value}>
+                                {value.replace(/_/g, " ")}
+                            </option>
+                        ))}
 
                     </select>
 
                 </div>
 
+                {/* LOADING */}
 
                 {loading ? (
 
                     <div className="ap-empty">
-
                         <LoaderCircle
-                            size={42}
+                            size={35}
                             className="ap-spin"
                         />
-
-                        <h3>Loading transactions...</h3>
-
+                        <h3>Loading records...</h3>
+                        <p>Please wait.</p>
                     </div>
 
-                ) : error ? (
+                ) : rows.length === 0 ? (
 
                     <div className="ap-empty">
-
-                        <AlertCircle size={44} />
-
-                        <h3>Unable to load payments</h3>
-
-                        <p>{error}</p>
-
-                        <button
-                            className="ap-primary"
-                            onClick={loadPayments}
-                        >
-
-                            Try again
-
-                        </button>
-
-                    </div>
-
-                ) : visiblePayments.length === 0 ? (
-
-                    <div className="ap-empty">
-
-                        <Receipt size={53} />
-
-                        <h3>No transactions found</h3>
-
+                        <Receipt size={40} />
+                        <h3>No records found</h3>
                         <p>
-
-                            Membership payment records
-                            will appear here.
-
+                            {error
+                                ? "Unable to load records."
+                                : "No matching records available."}
                         </p>
-
                     </div>
 
                 ) : (
 
                     <div className="ap-table-wrapper">
 
-                        <table className="ap-table">
+                        {/* TRANSACTIONS TABLE */}
 
-                            <thead>
+                        {tab === "payments" && (
 
-                                <tr>
+                            <table className="ap-table">
 
-                                    <th>Transaction</th>
+                                <thead>
+                                    <tr>
+                                        <th>Transaction</th>
+                                        <th>Member</th>
+                                        <th>Method</th>
+                                        <th>Coupon</th>
+                                        <th>Discount</th>
+                                        <th>Paid Amount</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
 
-                                    <th>Member</th>
+                                <tbody>
 
-                                    <th>Coupon</th>
+                                    {rows.map((payment) => (
 
-                                    <th>Original price</th>
+                                        <tr key={payment.id}>
 
-                                    <th>Discount</th>
+                                            <td>
+                                                <div className="ap-transaction">
 
-                                    <th>Amount paid</th>
+                                                    <div className="ap-transaction-icon">
+                                                        <CreditCard size={18} />
+                                                    </div>
 
-                                    <th>Status</th>
+                                                    <div>
+                                                        <strong>
+                                                            {getTransactionId(payment)}
+                                                        </strong>
 
-                                    <th>Actions</th>
-
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                {visiblePayments.map(payment => (
-
-                                    <tr key={payment.id}>
-
-                                        <td>
-
-                                            <div className="ap-transaction">
-
-                                                <div className="ap-row-icon">
-
-                                                    <Receipt size={19} />
+                                                        <small>
+                                                            {date(payment.createdAt)}
+                                                        </small>
+                                                    </div>
 
                                                 </div>
+                                            </td>
 
-                                                <div>
+                                            <td>
+                                                #{payment.userId}
+                                            </td>
+
+                                            <td>
+                                                {getPaymentMethod(payment)}
+                                            </td>
+
+                                            <td>
+                                                {payment.couponCode ? (
+                                                    <span className="ap-coupon">
+                                                        {payment.couponCode}
+                                                    </span>
+                                                ) : "—"}
+                                            </td>
+
+                                            <td className="ap-discount">
+                                                {money(payment.discountPaise)}
+                                            </td>
+
+                                            <td className="ap-amount">
+                                                {money(payment.paidPaise)}
+                                            </td>
+
+                                            <td>
+                                                <StatusBadge
+                                                    status={getPaymentStatus(payment)}
+                                                />
+                                            </td>
+
+                                            <td>
+                                                <div className="ap-actions">
+
+                                                    {canDownloadReceipt(payment) && (
+                                                        <>
+                                                            <button
+                                                                className="ap-icon-button"
+                                                                title="View receipt"
+                                                                aria-label="View receipt"
+                                                                disabled={busy}
+                                                                onClick={() =>
+                                                                    openReceipt(payment)
+                                                                }
+                                                            >
+                                                                <Eye size={17} />
+                                                            </button>
+
+                                                            <button
+                                                                className="ap-icon-button"
+                                                                title="Download receipt"
+                                                                aria-label="Download receipt"
+                                                                disabled={busy}
+                                                                onClick={() =>
+                                                                    downloadReceipt(payment.id)
+                                                                }
+                                                            >
+                                                                <Download size={17} />
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    {canRefund(payment) && (
+                                                        <button
+                                                            className="ap-action-refund"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                openRefund(payment)
+                                                            }
+                                                        >
+                                                            <Undo2 size={15} />
+                                                            Refund
+                                                        </button>
+                                                    )}
+
+                                                    {[
+                                                        "REFUND_PENDING",
+                                                        "REFUNDED",
+                                                    ].includes(
+                                                        getPaymentStatus(payment)
+                                                    ) && (
+                                                        <button
+                                                            className="ap-action-primary"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                openRefundByPayment(payment)
+                                                            }
+                                                        >
+                                                            Refund Details
+                                                        </button>
+                                                    )}
+
+                                                </div>
+                                            </td>
+
+                                        </tr>
+
+                                    ))}
+
+                                </tbody>
+
+                            </table>
+
+                        )}
+
+                        {/* PAYMENT ORDERS TABLE */}
+
+                        {tab === "orders" && (
+
+                            <table className="ap-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Order Reference</th>
+                                        <th>Member</th>
+                                        <th>Plan</th>
+                                        <th>Coupon</th>
+                                        <th>Payable</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    {rows.map((order) => (
+
+                                        <tr key={order.id}>
+
+                                            <td>
+                                                <div className="ap-cell-stack">
 
                                                     <strong>
-
-                                                        {getTransactionId(
-                                                            payment
-                                                        )}
-
+                                                        {order.orderReference}
                                                     </strong>
 
                                                     <small>
+                                                        {order.razorpayOrderId || "No gateway order"}
+                                                    </small>
 
-                                                        {formatPaymentDate(
-                                                            payment.createdAt ||
-                                                            payment.paymentDate
-                                                        )}
-
+                                                    <small>
+                                                        {date(order.createdAt)}
                                                     </small>
 
                                                 </div>
+                                            </td>
 
-                                            </div>
+                                            <td>#{order.userId}</td>
 
-                                        </td>
+                                            <td>
+                                                {order.planName}
+                                            </td>
 
-                                        <td>
+                                            <td>
+                                                {order.couponCode || "—"}
+                                            </td>
 
-                                            <strong>
+                                            <td className="ap-amount">
+                                                {money(order.payablePaise)}
+                                            </td>
 
-                                                {payment.memberName ||
-                                                    `Member #${payment.userId}`}
+                                            <td>
+                                                <StatusBadge
+                                                    status={order.status}
+                                                />
+                                            </td>
 
-                                            </strong>
+                                            <td>
+                                                <div className="ap-actions">
 
-                                            <small>
+                                                    <button
+                                                        className="ap-icon-button"
+                                                        disabled={busy}
+                                                        title="Order details"
+                                                        aria-label="Order details"
+                                                        onClick={() => {
+                                                            setModalError("");
+                                                            setModal({
+                                                                type: "order-details",
+                                                                data: order,
+                                                            });
+                                                        }}
+                                                    >
+                                                        <Eye size={17} />
+                                                    </button>
 
-                                                {payment.email ||
-                                                    `ID: ${payment.userId}`}
+                                                    {[
+                                                        "PENDING",
+                                                        "CAPTURED",
+                                                    ].includes(order.status) &&
+                                                        order.razorpayOrderId && (
 
-                                            </small>
-
-                                        </td>
-
-                                        <td>
-
-                                            <span className="ap-coupon">
-
-                                                {payment.couponCode || "—"}
-
-                                            </span>
-
-                                        </td>
-
-                                        <td>
-
-                                            {formatPaymentMoney(
-                                                payment.originalPaise
-                                            )}
-
-                                        </td>
-
-                                        <td className="ap-green-text">
-
-                                            {formatPaymentMoney(
-                                                payment.discountPaise
-                                            )}
-
-                                        </td>
-
-                                        <td>
-
-                                            <strong>
-
-                                                {formatPaymentMoney(
-                                                    payment.paidPaise
-                                                )}
-
-                                            </strong>
-
-                                        </td>
-
-                                        <td>
-
-                                            <PaymentStatus
-                                                payment={payment}
-                                            />
-
-                                        </td>
-
-                                        <td>
-
-                                            <div className="ap-actions">
-
-                                                <button
-                                                    className="ap-icon-button"
-                                                    title="View receipt"
-                                                    aria-label="View receipt"
-                                                    onClick={() =>
-                                                        setSelected(payment)
-                                                    }
-                                                >
-
-                                                    <Eye size={18} />
-
-                                                </button>
-
-                                                <button
-                                                    className="ap-icon-button"
-                                                    title="Download PDF"
-                                                    aria-label="Download PDF"
-                                                    disabled={
-                                                        downloading !== null
-                                                    }
-                                                    onClick={() =>
-                                                        downloadReceipt(
-                                                            payment.id
-                                                        )
-                                                    }
-                                                >
-
-                                                    {downloading === payment.id ? (
-
-                                                        <LoaderCircle
-                                                            size={18}
-                                                            className="ap-spin"
-                                                        />
-
-                                                    ) : (
-
-                                                        <Download size={18} />
+                                                        <button
+                                                            className="ap-action-primary"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                reconcileOrder(order)
+                                                            }
+                                                        >
+                                                            <RefreshCw size={15} />
+                                                            Verify
+                                                        </button>
 
                                                     )}
 
-                                                </button>
+                                                </div>
+                                            </td>
 
-                                            </div>
+                                        </tr>
 
-                                        </td>
+                                    ))}
 
+                                </tbody>
+
+                            </table>
+
+                        )}
+
+                        {/* REFUNDS TABLE */}
+
+                        {tab === "refunds" && (
+
+                            <table className="ap-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Refund Reference</th>
+                                        <th>Payment</th>
+                                        <th>Member</th>
+                                        <th>Amount</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
                                     </tr>
+                                </thead>
 
-                                ))}
+                                <tbody>
 
-                            </tbody>
+                                    {rows.map((refund) => (
 
-                        </table>
+                                        <tr key={refund.id}>
+
+                                            <td>
+                                                <div className="ap-cell-stack">
+
+                                                    <strong>
+                                                        {refund.refundReference}
+                                                    </strong>
+
+                                                    <small>
+                                                        {refund.razorpayRefundId || "Awaiting gateway ID"}
+                                                    </small>
+
+                                                    <small>
+                                                        {date(refund.createdAt)}
+                                                    </small>
+
+                                                </div>
+                                            </td>
+
+                                            <td>
+                                                #{refund.paymentId}
+                                            </td>
+
+                                            <td>
+                                                #{refund.userId}
+                                            </td>
+
+                                            <td className="ap-refund-amount">
+                                                {money(refund.amountPaise)}
+                                            </td>
+
+                                            <td>
+                                                <span
+                                                    className="ap-reason-text"
+                                                    title={refund.reason}
+                                                >
+                                                    {refund.reason}
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <StatusBadge
+                                                    status={refund.status}
+                                                />
+                                            </td>
+
+                                            <td>
+                                                <div className="ap-actions">
+
+                                                    <button
+                                                        className="ap-icon-button"
+                                                        title="Refund details"
+                                                        aria-label="Refund details"
+                                                        disabled={busy}
+                                                        onClick={() => {
+                                                            setModalError("");
+                                                            setModal({
+                                                                type: "refund-details",
+                                                                data: refund,
+                                                            });
+                                                        }}
+                                                    >
+                                                        <Eye size={17} />
+                                                    </button>
+
+                                                    {refund.status !== "PROCESSED" && (
+                                                        <button
+                                                            className="ap-action-primary"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                reconcileRefund(refund)
+                                                            }
+                                                        >
+                                                            <RefreshCw size={15} />
+                                                            Verify
+                                                        </button>
+                                                    )}
+
+                                                </div>
+                                            </td>
+
+                                        </tr>
+
+                                    ))}
+
+                                </tbody>
+
+                            </table>
+
+                        )}
 
                     </div>
 
                 )}
 
-
-                {/* PAGINATION */}
-
-                {!loading &&
-                    !error &&
-                    totalPages > 0 && (
-
-                    <footer className="ap-pagination">
-
-                        <span>
-
-                            Showing {currentPage * PAGE_SIZE + 1}
-
-                            {" "}to{" "}
-
-                            {Math.min(
-                                (currentPage + 1) * PAGE_SIZE,
-                                filteredPayments.length
-                            )}
-
-                            {" "}of{" "}
-
-                            {filteredPayments.length} transactions
-
-                        </span>
-
-                        <div>
-
-                            <button
-                                disabled={currentPage === 0}
-                                onClick={() =>
-                                    setPage(currentPage - 1)
-                                }
-                                aria-label="Previous page"
-                            >
-
-                                <ChevronLeft size={19} />
-
-                            </button>
-
-                            <strong>
-
-                                {currentPage + 1} / {totalPages}
-
-                            </strong>
-
-                            <button
-                                disabled={
-                                    currentPage + 1 >= totalPages
-                                }
-                                onClick={() =>
-                                    setPage(currentPage + 1)
-                                }
-                                aria-label="Next page"
-                            >
-
-                                <ChevronRight size={19} />
-
-                            </button>
-
-                        </div>
-
-                    </footer>
-
+                {!loading && (
+                    <Pagination
+                        page={page}
+                        totalPages={totalPages}
+                        total={total}
+                        disabled={busy}
+                        onChange={setPage}
+                    />
                 )}
 
             </section>
 
+            {/* SECURITY NOTE */}
 
-            {/* DETAILS MODAL */}
+            <section className="ap-security-note">
 
-            {selected && (
+                <div className="ap-security-icon">
+                    <ShieldCheck size={24} />
+                </div>
 
-                <ReceiptModal
-                    payment={selected}
-                    onClose={() => setSelected(null)}
-                    onDownload={downloadReceipt}
-                    downloading={downloading}
-                />
+                <div>
+                    <h3>Secure Payment Operations</h3>
+                    <p>
+                        Refunds are verified through Razorpay.
+                        Reconciliation checks existing transactions
+                        without creating another refund.
+                    </p>
+                </div>
+
+            </section>
+
+            {/* REFUND REQUEST MODAL */}
+
+            {modal?.type === "refund-request" && (
+
+                <Modal
+                    title="Confirm Refund"
+                    subtitle="Review the transaction before proceeding."
+                    onClose={closeModal}
+                    busy={busy}
+                >
+
+                    <form onSubmit={submitRefund}>
+
+                        <div className="ap-refund-preview">
+
+                            <div className="ap-refund-preview-icon">
+                                <Undo2 size={28} />
+                            </div>
+
+                            <span>Full refund amount</span>
+
+                            <h2>
+                                {money(modal.data.paidPaise)}
+                            </h2>
+
+                            <small>
+                                Refund to original payment method
+                            </small>
+
+                        </div>
+
+                        <div className="ap-details-grid">
+
+                            <DetailItem
+                                label="Transaction ID"
+                                value={getTransactionId(modal.data)}
+                            />
+
+                            <DetailItem
+                                label="Member ID"
+                                value={`#${modal.data.userId}`}
+                            />
+
+                            <DetailItem
+                                label="Payment Method"
+                                value={getPaymentMethod(modal.data)}
+                            />
+
+                            <DetailItem
+                                label="Coupon Discount"
+                                value={money(modal.data.discountPaise)}
+                            />
+
+                        </div>
+
+                        <div className="ap-warning-box">
+
+                            <AlertCircle size={21} />
+
+                            <p>
+                                This requests a full refund through
+                                Razorpay. Membership validity is not
+                                automatically cancelled. Refunds may
+                                take time to process.
+                            </p>
+
+                        </div>
+
+                        <label
+                            className="ap-field-label"
+                            htmlFor="refund-reason"
+                        >
+                            Refund reason *
+                        </label>
+
+                        <textarea
+                            id="refund-reason"
+                            className="ap-textarea"
+                            value={refundReason}
+                            onChange={(event) =>
+                                setRefundReason(event.target.value)
+                            }
+                            placeholder="Enter the reason for this refund..."
+                            minLength={5}
+                            maxLength={500}
+                            disabled={busy}
+                            required
+                        />
+
+                        <div className="ap-character-count">
+                            {refundReason.length}/500
+                        </div>
+
+                        <label className="ap-confirm-check">
+
+                            <input
+                                type="checkbox"
+                                checked={confirmed}
+                                disabled={busy}
+                                onChange={(event) =>
+                                    setConfirmed(event.target.checked)
+                                }
+                            />
+
+                            <span>
+                                I confirm that this full refund
+                                is authorized and the amount
+                                is correct.
+                            </span>
+
+                        </label>
+
+                        {modalError && (
+                            <div
+                                className="ap-alert ap-alert-error"
+                                role="alert"
+                            >
+                                <AlertCircle size={18} />
+                                <span>{modalError}</span>
+                            </div>
+                        )}
+
+                        <div className="ap-modal-footer">
+
+                            <button
+                                type="button"
+                                className="ap-button-secondary"
+                                disabled={busy}
+                                onClick={closeModal}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="submit"
+                                className="ap-button-danger"
+                                disabled={
+                                    busy ||
+                                    !confirmed ||
+                                    refundReason.trim().length < 5 ||
+                                    refundReason.trim().length > 500
+                                }
+                            >
+                                {busy ? (
+                                    <LoaderCircle
+                                        size={17}
+                                        className="ap-spin"
+                                    />
+                                ) : (
+                                    <Undo2 size={17} />
+                                )}
+
+                                {busy
+                                    ? "Submitting..."
+                                    : "Confirm Full Refund"}
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </Modal>
+
+            )}
+
+            {/* REFUND DETAILS MODAL */}
+
+            {modal?.type === "refund-details" && (
+
+                <Modal
+                    title="Refund Details"
+                    subtitle="Gateway refund information and status."
+                    onClose={closeModal}
+                    busy={busy}
+                >
+
+                    <div className="ap-refund-preview">
+
+                        <Undo2 size={28} />
+
+                        <span>Refund Amount</span>
+
+                        <h2>
+                            {money(modal.data.amountPaise)}
+                        </h2>
+
+                        <StatusBadge status={modal.data.status} />
+
+                    </div>
+
+                    <div className="ap-details-grid">
+
+                        <DetailItem
+                            label="Refund ID"
+                            value={`#${modal.data.id}`}
+                        />
+
+                        <DetailItem
+                            label="Payment ID"
+                            value={`#${modal.data.paymentId}`}
+                        />
+
+                        <DetailItem
+                            label="Refund Reference"
+                            value={modal.data.refundReference}
+                        />
+
+                        <DetailItem
+                            label="Razorpay Refund ID"
+                            value={modal.data.razorpayRefundId}
+                        />
+
+                        <DetailItem
+                            label="Member ID"
+                            value={modal.data.userId}
+                        />
+
+                        <DetailItem
+                            label="Requested By Admin"
+                            value={modal.data.requestedBy}
+                        />
+
+                        <DetailItem
+                            label="Requested On"
+                            value={date(modal.data.createdAt)}
+                        />
+
+                        <DetailItem
+                            label="Processed On"
+                            value={date(modal.data.processedAt)}
+                        />
+
+                        <DetailItem
+                            label="Last Checked"
+                            value={date(modal.data.lastCheckedAt)}
+                        />
+
+                        <DetailItem
+                            label="Gateway Payment ID"
+                            value={modal.data.razorpayPaymentId}
+                        />
+
+                    </div>
+
+                    <div className="ap-reason-box">
+                        <span>Refund Reason</span>
+                        <p>{modal.data.reason}</p>
+                    </div>
+
+                    {modal.data.failureReason && (
+                        <div className="ap-warning-box">
+                            <AlertCircle size={20} />
+                            <p>{modal.data.failureReason}</p>
+                        </div>
+                    )}
+
+                    {modalError && (
+                        <div
+                            className="ap-alert ap-alert-error"
+                            role="alert"
+                        >
+                            <AlertCircle size={18} />
+                            <span>{modalError}</span>
+                        </div>
+                    )}
+
+                    <div className="ap-modal-footer">
+
+                        <button
+                            className="ap-button-secondary"
+                            onClick={closeModal}
+                            disabled={busy}
+                        >
+                            Close
+                        </button>
+
+                        {modal.data.status !== "PROCESSED" && (
+                            <button
+                                className="ap-button-primary"
+                                disabled={busy}
+                                onClick={() =>
+                                    reconcileRefund(modal.data)
+                                }
+                            >
+                                <RefreshCw
+                                    size={17}
+                                    className={busy ? "ap-spin" : ""}
+                                />
+                                Check Refund Status
+                            </button>
+                        )}
+
+                    </div>
+
+                </Modal>
+
+            )}
+
+            {/* ORDER DETAILS MODAL */}
+
+            {modal?.type === "order-details" && (
+
+                <Modal
+                    title="Payment Order Details"
+                    subtitle="Membership checkout information."
+                    onClose={closeModal}
+                    busy={busy}
+                >
+
+                    <div className="ap-receipt-banner">
+
+                        <CreditCard size={30} />
+
+                        <div>
+                            <span>Payable Amount</span>
+                            <h2>{money(modal.data.payablePaise)}</h2>
+                        </div>
+
+                        <StatusBadge status={modal.data.status} />
+
+                    </div>
+
+                    <div className="ap-details-grid">
+
+                        <DetailItem
+                            label="Order ID"
+                            value={modal.data.id}
+                        />
+
+                        <DetailItem
+                            label="Member ID"
+                            value={modal.data.userId}
+                        />
+
+                        <DetailItem
+                            label="Order Reference"
+                            value={modal.data.orderReference}
+                        />
+
+                        <DetailItem
+                            label="Razorpay Order ID"
+                            value={modal.data.razorpayOrderId}
+                        />
+
+                        <DetailItem
+                            label="Membership Plan"
+                            value={modal.data.planName}
+                        />
+
+                        <DetailItem
+                            label="Membership Days"
+                            value={modal.data.membershipDays}
+                        />
+
+                        <DetailItem
+                            label="Original Amount"
+                            value={money(modal.data.originalPaise)}
+                        />
+
+                        <DetailItem
+                            label="Discount"
+                            value={money(modal.data.discountPaise)}
+                        />
+
+                        <DetailItem
+                            label="Coupon"
+                            value={modal.data.couponCode}
+                        />
+
+                        <DetailItem
+                            label="Created On"
+                            value={date(modal.data.createdAt)}
+                        />
+
+                        <DetailItem
+                            label="Gateway Payment ID"
+                            value={modal.data.razorpayPaymentId}
+                        />
+
+                        <DetailItem
+                            label="Completed On"
+                            value={date(modal.data.completedAt)}
+                        />
+
+                    </div>
+
+                    {modal.data.failureReason && (
+                        <div className="ap-warning-box">
+                            <AlertCircle size={20} />
+                            <p>{modal.data.failureReason}</p>
+                        </div>
+                    )}
+
+                    <div className="ap-modal-footer">
+
+                        <button
+                            className="ap-button-secondary"
+                            onClick={closeModal}
+                            disabled={busy}
+                        >
+                            Close
+                        </button>
+
+                    </div>
+
+                </Modal>
+
+            )}
+
+            {/* RECEIPT MODAL */}
+
+            {modal?.type === "receipt" && (
+
+                <Modal
+                    title="Payment Receipt"
+                    subtitle={modal.data.receiptNumber}
+                    onClose={closeModal}
+                    busy={busy}
+                >
+
+                    <div className="ap-receipt-banner">
+
+                        <Receipt size={30} />
+
+                        <div>
+                            <span>Total Paid</span>
+                            <h2>{money(modal.data.paidPaise)}</h2>
+                        </div>
+
+                        <StatusBadge
+                            status={modal.data.paymentStatus}
+                        />
+
+                    </div>
+
+                    <div className="ap-details-grid">
+
+                        <DetailItem
+                            label="Member Name"
+                            value={modal.data.memberName}
+                        />
+
+                        <DetailItem
+                            label="Email"
+                            value={modal.data.email}
+                        />
+
+                        <DetailItem
+                            label="Transaction ID"
+                            value={modal.data.transactionId}
+                        />
+
+                        <DetailItem
+                            label="Payment Date"
+                            value={date(modal.data.paymentDate)}
+                        />
+
+                        <DetailItem
+                            label="Membership Plan"
+                            value={modal.data.membershipPlan}
+                        />
+
+                        <DetailItem
+                            label="Payment Method"
+                            value={modal.data.paymentMethod}
+                        />
+
+                        <DetailItem
+                            label="Membership Start"
+                            value={modal.data.membershipStartDate}
+                        />
+
+                        <DetailItem
+                            label="Membership End"
+                            value={modal.data.membershipEndDate}
+                        />
+
+                        <DetailItem
+                            label="Original Amount"
+                            value={money(modal.data.originalPaise)}
+                        />
+
+                        <DetailItem
+                            label="Discount"
+                            value={money(modal.data.discountPaise)}
+                        />
+
+                    </div>
+
+                    {modalError && (
+                        <div
+                            className="ap-alert ap-alert-error"
+                            role="alert"
+                        >
+                            <AlertCircle size={18} />
+                            <span>{modalError}</span>
+                        </div>
+                    )}
+
+                    <div className="ap-modal-footer">
+
+                        <button
+                            className="ap-button-secondary"
+                            onClick={closeModal}
+                            disabled={busy}
+                        >
+                            Close
+                        </button>
+
+                        <button
+                            className="ap-button-primary"
+                            disabled={busy}
+                            onClick={() =>
+                                downloadReceipt(modal.data.paymentId)
+                            }
+                        >
+                            <Download size={18} />
+                            Download PDF
+                        </button>
+
+                    </div>
+
+                </Modal>
 
             )}
 
         </main>
-
     );
-
 }

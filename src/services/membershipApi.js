@@ -1,46 +1,52 @@
 import { api } from "./api";
 
-// ==========================================
-// MEMBERSHIP API
-// ==========================================
+function normalizeCode(code) {
+  return String(code ?? "").trim().toUpperCase() || null;
+}
 
 export const membershipApi = {
-
-  // GET MEMBER DASHBOARD
 
   getDashboard() {
     return api("/member/dashboard");
   },
 
-  // APPLY COUPON
+  getQuote(code = null) {
+    return api("/payments/checkout/quote", "POST", {
+      code: normalizeCode(code),
+    });
+  },
 
   applyCoupon(code) {
-    return api(
-      "/payments/quote",
-      "POST",
-      {
-        code: String(code || "")
-          .trim()
-          .toUpperCase(),
-      }
-    );
+    return api("/payments/checkout/quote", "POST", {
+      code: normalizeCode(code),
+    });
   },
 
-  // ACTIVATE MEMBERSHIP
+  createOrder(code = null) {
+    return api("/payments/create-order", "POST", {
+      code: normalizeCode(code),
+    });
+  },
+
+  verifyPayment(payload) {
+    return api("/payments/verify", "POST", payload);
+  },
+
+  redeemCoupon(code) {
+    return api("/payments/redeem", "POST", {
+      code: normalizeCode(code),
+    });
+  },
 
   activateMembership(code) {
-    return api(
-      "/payments/demo",
-      "POST",
-      {
-        code: String(code || "")
-          .trim()
-          .toUpperCase(),
-      }
-    );
+    return api("/payments/redeem", "POST", {
+      code: normalizeCode(code),
+    });
   },
 
-  // PAYMENT HISTORY
+  getOrder(orderId) {
+    return api(`/payments/orders/${orderId}`);
+  },
 
   getPaymentHistory() {
     return api("/payments/me");
@@ -48,20 +54,13 @@ export const membershipApi = {
 
 };
 
-// ==========================================
-// CURRENCY FORMATTER
-// Backend amount: Paise
-// ==========================================
-
 export function formatCurrency(amount) {
 
   if (amount == null) return "—";
 
   const value = Number(amount);
 
-  if (!Number.isFinite(value)) {
-    return "—";
-  }
+  if (!Number.isFinite(value)) return "—";
 
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -71,10 +70,6 @@ export function formatCurrency(amount) {
   }).format(value / 100);
 
 }
-
-// ==========================================
-// MEMBERSHIP DATE FORMATTER
-// ==========================================
 
 export function formatMembershipDate(value) {
 
@@ -88,9 +83,7 @@ export function formatMembershipDate(value) {
 
   const date = new Date(normalized);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
